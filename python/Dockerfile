@@ -1,9 +1,16 @@
-FROM python:3.7-stretch
+FROM ubuntu:18.04
+LABEL maintainer "Wai Lam Jonathan Lee <jonathan.wailam.lee@gmail.com>"
+
+ENV TZ=Europe/Copenhagen
+RUN ln -snf /usr/share/zoneinfo/$TZ /etc/localtime && echo $TZ > /etc/timezone
 
 RUN apt-get update && apt-get install -y \
 	git \
 	vim \
-	make
+	make \
+	python3-pip \
+	python3-dev \
+	build-essential
 
 ENV HOME=/root
 WORKDIR $HOME
@@ -26,6 +33,16 @@ RUN apt-get update && apt-get install -y \
 
 ENV LANG en_US.UTF-8
 
-WORKDIR /code
-COPY . /code
+# packages for PM4Py
+RUN apt-get update && apt-get install -y \
+	graphviz \
+	libblas-dev \
+	liblapack-dev \
+	libsuitesparse-dev \
+	python3-tk
 
+WORKDIR $HOME/slac/code
+
+# install requirements
+COPY ./requirements.txt /requirements.txt
+RUN pip3 install -r /requirements.txt
