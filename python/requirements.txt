@@ -1,2 +1,6 @@
 pm4py
 pandas>=0.24.0
+cython
+hmmlearn
+matplotlib
+scikit-learn

@@ -10,7 +10,10 @@ RUN apt-get update && apt-get install -y \
 	make \
 	python3-pip \
 	python3-dev \
-	build-essential
+	build-essential \
+	eog \
+	libcanberra-gtk-module \
+	libcanberra-gtk3-module 
 
 ENV HOME=/root
 WORKDIR $HOME
@@ -43,6 +46,19 @@ RUN apt-get update && apt-get install -y \
 
 WORKDIR $HOME/slac/code
 
+RUN echo 'alias python=python3' >> $HOME/.bashrc \
+	&& echo 'alias pip=pip3' >> $HOME/.bashrc 
+
 # install requirements
 COPY ./requirements.txt /requirements.txt
 RUN pip3 install -r /requirements.txt
+
+RUN useradd --create-home --home-dir $HOME jonny \
+	&& groupadd code \
+	&& gpasswd -a jonny code \
+	&& chown -R jonny:jonny $HOME
+
+USER jonny
+
+# check that hmmlearn was installed
+RUN python3 -c "import hmmlearn; print('hmmlearn version: {}'.format(hmmlearn.__version__))"
