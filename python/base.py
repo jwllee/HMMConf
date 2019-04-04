@@ -93,80 +93,175 @@ class HMMConf(utils.Logged):
 
         return np.dot(stateprob, self.confmat[obs])
 
-    def emissionprob(self, stateprob, obs):
+    def emissionprob(self, obs, conf):
         """
         Computes P(x is obs at time t | z at time t) where x is the observation variable
         and z is the state variable. 
 
-        :param stateprob: P(Z_t | X_{1:t} = x_{1:t}), i.e. normalized forward probability at time t
         :param obs: observation at time t
+        :param conf: conformance between stateprob and obs
         """
-        if (stateprob.shape[1] != self.emitmat.shape[0]):
-            raise ValueError('Invalid state length: {}'.format(stateprob))
-        conf = self.conform(stateprob, obs)
+        prob = conf * self.emitmat[:,obs] + (1 - conf) * self.emitmat_d[:,obs]
+        return prob
 
-        msg = 'Conformance between state and observation at time t ' \
-              'before observation adjustment: {:.2f}'.format(conf[0])
-        self.logger.info(msg)
-
-        return conf * self.emitmat[:,obs] + (1 - conf) * self.emitmat_d[:,obs]
-
-    def stateprob(self, stateprob, obs):
+    def stateprob(self, obs, conf):
         """
         Computes P(z at time t | z at time t - 1, x is obs at time t - 1) where x is the observation
         variable and z is the state variable.
 
-        :param stateprob: P(Z_{t-1} | X_{1:t-1} = x_{1:t-1}), i.e., normalized forward probability at time t  - 1
         :param obs: observed activity at time t - 1
+        :param conf: conformance between stateprob and obs
         """
-        if (stateprob.shape[1] != self.n_states):
-            raise ValueError('Invalid state length: {}'.format(stateprob))
-
-        conf = self.conform(stateprob, obs)
-
-        msg = 'Conformance between state and observation at time t' \
-              ' before observation adjustment: {:.2f}'.format(conf[0])
-        self.logger.info(msg)
-
-        return conf * self.transcube[obs,:,:] + (1 - conf) * self.transcube_d[obs,:,:]
+        prob = conf * self.transcube[obs,:,:] + (1 - conf) * self.transcube_d[obs,:,:]
+        return prob
 
     def forward(self, obs, prev_obs=None, prev_fwd=None):
         """Computes the log forward probability.
-        """
-        if prev_fwd is None:
-            return utils.log_mask_zero(self.startprob) + utils.log_mask_zero(self.emissionprob(self.startprob, obs))
 
-        work_buffer = prev_fwd.copy()
-        utils.log_normalize(work_buffer, axis=1)
-        prev_stateprob = np.exp(work_buffer)
-        work_buffer = utils.log_mask_zero(self.stateprob(prev_stateprob, prev_obs))
+        :return: log forward probability, conformance array
+        """
+        conf_arr = np.full(3, -1.)
+
+        if prev_fwd is None:
+            emitconf = self.conform(self.startprob, obs)
+            emitprob = self.emissionprob(obs, emitconf)
+            logfwd = utils.log_mask_zero(self.startprob) + utils.log_mask_zero(emitprob)
+            fwd = logfwd.copy()
+            utils.log_normalize(fwd, axis=1)
+            fwd = np.exp(fwd)
+            conf_arr[1] = emitconf[0]
+            conf_arr[2] = self.conform(fwd, obs)
+            return logfwd, conf_arr
+
+        arr_buffer = prev_fwd.copy()
+        utils.log_normalize(arr_buffer, axis=1)
+        # P(Z_{t-1} | X_{1:t-1} = x_{1:t-1}), i.e., normalized forward probability at time t  - 1
+        prev_stateprob = np.exp(arr_buffer)
+        stateconf = self.conform(prev_stateprob, prev_obs)
+        stateprob = self.stateprob(prev_obs, stateconf)
+        logstateprob = utils.log_mask_zero(stateprob)
         # print('Previous fwd: {}'.format(prev_fwd))
-        cur_fwd_est = logsumexp(work_buffer.T + prev_fwd, axis=1)
+        self.logger.info('State trans probability: \n{}'.format(stateprob))
+        cur_fwd_est = logsumexp(logstateprob.T + prev_fwd, axis=1)
         cur_fwd_est = cur_fwd_est.reshape([1, self.n_states])
-        work_buffer = cur_fwd_est.copy()
         # print('Current fwd est.: {}'.format(work_buffer))
-        utils.log_normalize(work_buffer, axis=1)
-        cur_stateprob = np.exp(work_buffer)
+
+        # some helpful loggings during development...
+        arr_buffer = cur_fwd_est.copy()
+        utils.log_normalize(arr_buffer, axis=1)
+        # P(Z_t | X_{1:t} = x_{1:t}), i.e. normalized forward probability at time t
+        cur_stateprob = np.exp(arr_buffer)
 
         msg0 = '   Log state estimate of time t before observation at time t: {}'.format(cur_fwd_est)
         msg1 = 'W. State estimate of time t before observation at time t: {}'.format(cur_stateprob)
         self.logger.info(msg0)
         self.logger.info(msg1)
 
-        obs_prob = self.emissionprob(cur_stateprob, obs)
-        msg2 = 'Likelihood of observation at states time t: {}'.format(obs_prob)
-        obs_prob = utils.log_mask_zero(obs_prob)
+        emitconf = self.conform(cur_stateprob, obs)
+        obsprob = self.emissionprob(obs, emitconf)
+        msg2 = 'Likelihood of observation at states time t: {}'.format(obsprob)
+        obsprob = utils.log_mask_zero(obsprob)
         self.logger.info(msg2)
-        return obs_prob + cur_fwd_est
+        msg3 = 'Conformance between state and observation at time t ' \
+              'before observation adjustment: {:.2f}'.format(emitconf[0])
+        self.logger.info(msg3)
 
-    def _do_forward_pass(self, X, prev_fwd=None):
-        pass
+        logfwd = obsprob + cur_fwd_est
+        fwd = logfwd.copy()
+        utils.log_normalize(fwd, axis=1)
+        fwd = np.exp(fwd)
 
-    def _do_backward_pass(self, X, conf, prev_bwd=None):
-        pass
+        conf_arr[0] = stateconf[0]
+        conf_arr[1] = emitconf[0]
+        conf_arr[2] = self.conform(fwd, obs)
+
+        return logfwd, conf_arr
+
+    def backward(self, obs, prev_obs, conf_arr, prev_bwd=None):
+        """Computes the log backward probability.
+
+        :return: log backward probability
+        """
+        emitprob = self.emissionprob(obs, conf_arr[1])
+        stateprob = self.stateprob(prev_obs, conf_arr[0])
+        logemitprob = utils.log_mask_zero(emitprob)
+        logstateprob = utils.log_mask_zero(stateprob)
+
+        # no need to transpose logstateprob since we are broadcasting addition across the rows
+        summed = logemitprob + logstateprob
+        if prev_bwd is None:
+            bwd = logsumexp(logemitprob + logstateprob, axis=1)
+        else:
+            bwd = logsumexp(logemitprob + logstateprob + prev_bwd, axis=1)
+
+        self.logger.info('Backward probability: \n{}'.format(bwd))
+
+        return bwd
+
+    def _do_forward_pass(self, X):
+        """Computes the forward lattice containing the forward probability of a single sequence of
+        observations.
+
+        :param X: array of observations
+        :type X: array_like (n_samples, 1)
+        :return: the forward lattice and the conformance lattice
+        """
+        n_samples = X.shape[0]
+        fwdlattice = np.ndarray((n_samples, self.n_states))
+        conflattice = np.ndarray((n_samples, 3))
+
+        # first observation
+        obs = X[0,0]
+        fwd, conf = self.forward(obs)
+        fwdlattice[0] = fwd
+        conflattice[0] = conf
+
+        prev_obs = obs
+        prev_fwd = fwd
+        for i in range(1, n_samples):
+            obs = X[i,0]
+            fwd, conf = self.forward(obs, prev_obs, prev_fwd)
+            fwdlattice[i] = fwd
+            conflattice[i] = conf
+
+            prev_obs = obs
+            prev_fwd = fwd
+
+        return fwdlattice, conflattice
+
+    def _do_backward_pass(self, X, conflattice):
+        """Computes the backward lattice containing the backward probability of a single sequence 
+        of observations.
+
+        :param X: array of observations
+        :type X: array_like (n_samples, 1)
+        :param conflattice: 
+        :return: the backward lattice
+        """
+        n_samples = X.shape[0]
+        bwdlattice = np.ndarray((n_samples, self.n_states))
+        
+        # last observation bwd(T) = 1. for all states
+        bwdlattice[-1,:] = 0.
+        
+        obs = X[-1,0]
+        prev_bwd = bwdlattice[-1]
+        for i in range(n_samples - 2, -1, -1): # compute bwd(T - 1) to bwd(1)
+            prev_obs = X[i,0]
+            conf_arr = conflattice[i+1]
+            bwd = self.backward(obs, prev_obs, conf_arr, prev_bwd)
+            bwdlattice[i] = bwd
+
+            obs = prev_obs
+            prev_bwd = bwd
+
+        return bwdlattice
 
     def fit(self, X, lengths):
         pass
 
-    def _compute_posteriors(fwdlattice, bwdlattice):
-        pass
+    def _compute_posteriors(self, fwdlattice, bwdlattice):
+        log_gamma = fwdlattice + bwdlattice
+        utils.log_normalize(log_gamma, axis=1)
+        with np.errstate(under='ignore'):
+            return np.exp(log_gamma), np.exp(log_gamma).sum(axis=1)

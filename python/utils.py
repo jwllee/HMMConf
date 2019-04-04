@@ -16,6 +16,7 @@ logging.config.dictConfig({
         'default': {
             'level': 'INFO',
             'class': 'logging.StreamHandler',
+            'formatter': 'standard'
         },
     },
     'loggers': {
