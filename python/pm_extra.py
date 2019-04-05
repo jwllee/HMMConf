@@ -124,14 +124,14 @@ def collapse_inv_trans(rg, inv_states):
         # connect all incoming arcs to in_state to out_state
         inv_tran_weight = inv_tran.data['weight']
         in_state.outgoing.remove(inv_tran)
+        out_state.incoming.remove(inv_tran)
 
         for out_tran in out_state.outgoing:
-            out_tran.data['weight'] = out_tran.data['weight'] * inv_tran_weight
-            out_tran.from_state = in_state
-            in_state.outgoing.add(out_tran)
+            # make new transition that connect in_state to out_tran.out_state
+            data = {'weight': out_tran.data['weight'] * inv_tran_weight}
+            add_arc_from_to(out_tran.name, in_state, out_tran.to_state, rg, data)
 
         rg.transitions.remove(inv_tran)
-        rg.states.remove(out_state)
 
 
 def draw_undirected(G, node_map):
