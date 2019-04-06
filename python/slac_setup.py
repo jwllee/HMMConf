@@ -1,4 +1,4 @@
-import pm_extra, example_data
+import pm_extra, example_data, utils
 from pm4py.objects.transition_system import transition_system as ts
 import networkx as nx
 import numpy as np
@@ -21,7 +21,7 @@ def rg_to_nx_undirected(rg, map_nodes=False):
     if map_nodes:
         # map state name to node
         node_map = {key:val for val, key in enumerate(map(lambda state: state.name, rg.states))}
-        print(node_map)
+        # print(node_map)
         mapped_edges = map(lambda e: (node_map[e.from_state.name], node_map[e.to_state.name]), rg.transitions)
         G.add_edges_from(mapped_edges)
     else:
@@ -43,13 +43,60 @@ def compute_distance_matrix(G, node_map, as_dataframe=False):
             dist[src, target] = length_dict[target]
 
     if as_dataframe:
-        nodes = [n[0] for n in sorted(node_map.items(), key=lambda pair: pair[1])]
+        nodes = [n[1] for n in sorted(node_map.items(), key=lambda pair: pair[1])]
         dist = pd.DataFrame(dist)
         dist.columns = nodes
         dist['u'] = nodes
         dist.set_index('u', inplace=True)
 
     return dist
+
+
+def compute_state_trans_cube(rg, state_map, obs_map, n_obs, n_states):
+    cube = np.zeros((n_obs, n_states, n_states))
+    
+    for in_state in rg.states:
+        in_state_ind = state_map[in_state.name]
+
+        for tran in in_state.outgoing:
+            obs_ind = obs_map[tran.name]
+            out_state_ind = state_map[tran.to_state.name]
+
+            cube[obs_ind, in_state_ind, out_state_ind] += 1
+
+    utils.normalize(cube, axis=2)
+    return cube
+
+def compute_emission_mat(rg, state_map, obs_map, n_obs, n_states):
+    emitmat = np.zeros((n_states, n_obs))
+
+    for in_state in rg.states:
+        in_state_ind = state_map[in_state.name]
+
+        for tran in in_state.outgoing:
+            obs_ind = obs_map[tran.name]
+            emitmat[in_state_ind, obs_ind] += 1.
+
+    utils.normalize(emitmat, axis=1)
+    return emitmat
+
+
+def compute_conformance_mat(emitmat):
+    return (emitmat > 0).astype(np.int).T
+
+
+def compute_startprob(rg, state_map, n_states):
+    # initial marking is the only state without incoming
+    init = list(filter(lambda s: len(s.incoming) == 0, rg.states))
+
+    if len(init) != 1:
+        raise ValueError('Number of states with 0 incoming transitions: {}'.format(len(init)))
+
+    ind = state_map[init[0].name]
+    startprob = np.zeros((1, n_states))
+    startprob[0, ind] = 1.
+
+    return startprob
 
 
 if __name__ == '__main__':
