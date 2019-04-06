@@ -30,8 +30,8 @@ class ConvergenceMonitor:
     def report(self, logprob):
         if self.verbose:
             delta = logprob - self.history[-1] if self.history else np.nan
-            if delta == np.nan:
-                print(self._header)
+            if not self.history:
+                print(self._header, file=sys.stderr)
             message = self._template.format(iter=self.iter + 1, logprob=logprob, delta=delta)
             print(message, file=sys.stderr)
 
@@ -60,6 +60,8 @@ class HMMConf:
                  n_iter=10, tol=1e-2, verbose=False, *args, **kwargs): 
         utils.assert_shape('activities', transcube.shape[0], emitmat.shape[1])
         utils.assert_shape('states', transcube.shape[1], emitmat.shape[0])
+        utils.assert_no_negatives('transcube', transcube)
+        utils.assert_no_negatives('emitmat', emitmat)
 
         self.logger = utils.make_logger(self.__class__.__name__)
         self.params = params
@@ -80,17 +82,15 @@ class HMMConf:
         self.monitor = ConvergenceMonitor(self.tol, self.n_iter, self.verbose)
 
     def conform(self, stateprob, obs):
-        if not stateprob.shape == (1, self.n_states):
-            msg = """Number of components are different
-            [expected]: {left}
-            [parameter]: {right}
-            """.format(left=(1, self.n_states), right=stateprob.shape)
-            raise ValueError(msg)
+        utils.assert_shape('stateprob', (1, self.n_states), stateprob.shape)
 
         if not np.isclose(stateprob.sum(), [1.]):
             raise ValueError('State estimation: {} does not sum to 1.'.format(stateprob))
 
-        return np.dot(stateprob, self.confmat[obs])
+        v = np.dot(stateprob, self.confmat[obs])
+        utils.assert_no_negatives('conformance', v)
+        utils.assert_bounded('conformance', v, 0, 1)
+        return v
 
     def emissionprob(self, obs, conf):
         """
@@ -114,6 +114,9 @@ class HMMConf:
         :param conf: conformance between stateprob and obs
         """
         prob = conf * self.transcube[obs,:,:] + (1 - conf) * self.transcube_d[obs,:,:]
+        utils.assert_no_negatives('transcube[{},:,:]'.format(obs), self.transcube[obs,:,:])
+        utils.assert_no_negatives('transcube_d[{},:,:]'.format(obs), self.transcube_d[obs,:,:])
+        utils.assert_no_negatives('stateprob, conform: {}'.format(conf), prob)
         return prob
 
     def _forward(self, obs, prev_obs=None, prev_fwd=None):
@@ -130,34 +133,41 @@ class HMMConf:
             logobsprob = utils.log_mask_zero(obsprob)
             logfwd = utils.log_mask_zero(self.startprob) + logobsprob
             fwd = logfwd.copy()
-            utils.log_normalize(fwd, axis=1)
+            utils.log_normalize(fwd, axis=1) # to avoid underflow
             fwd = np.exp(fwd)
+            utils.normalize(fwd, axis=1) # to avoid not summing to 1 after exp
             conf_arr[self.SECOND_IND] = emitconf[0]
             conf_arr[self.UPDATED_IND] = self.conform(fwd, obs)
             logstateprob = np.full((self.transcube.shape[1], self.transcube.shape[1]), -np.inf)
             return logfwd, conf_arr, logstateprob, logobsprob
 
         arr_buffer = prev_fwd.copy()
-        utils.log_normalize(arr_buffer, axis=1)
+        utils.log_normalize(arr_buffer, axis=1) # to avoid underflow
         # P(Z_{t-1} | X_{1:t-1} = x_{1:t-1}), i.e., normalized forward probability at time t  - 1
         prev_stateprob = np.exp(arr_buffer)
+        utils.normalize(prev_stateprob, axis=1) # to avoid not summing to 1 after exp
         stateconf = self.conform(prev_stateprob, prev_obs)
         stateprob = self.stateprob(prev_obs, stateconf)
         logstateprob = utils.log_mask_zero(stateprob)
-        # print('Previous fwd: {}'.format(prev_fwd))
-        self.logger.debug('State trans probability: \n{}'.format(stateprob))
-        cur_fwd_est = logsumexp(logstateprob.T + prev_fwd, axis=1)
+        n_nonzeros = np.count_nonzero(stateprob)
+        self.logger.debug('No. non-zero vals: {}'.format(n_nonzeros))
+        self.logger.debug('Previous fwd: \n{}'.format(prev_fwd))
+        self.logger.debug('state prob: \n{}'.format(stateprob))
+        self.logger.debug('log state prob: \n{}'.format(logstateprob))
+        work_buffer = logstateprob.T + prev_fwd
+        self.logger.debug('No. nan vals: {}'.format(np.count_nonzero(np.isnan(work_buffer))))
+        cur_fwd_est = logsumexp(work_buffer, axis=1)
         cur_fwd_est = cur_fwd_est.reshape([1, self.n_states])
         # print('Current fwd est.: {}'.format(work_buffer))
 
         # some helpful loggings during development...
         arr_buffer = cur_fwd_est.copy()
-        utils.log_normalize(arr_buffer, axis=1)
+        utils.log_normalize(arr_buffer, axis=1) 
         # P(Z_t | X_{1:t} = x_{1:t}), i.e. normalized forward probability at time t
         cur_stateprob = np.exp(arr_buffer)
 
-        msg0 = '   Log state estimate of time t before observation at time t: {}'.format(cur_fwd_est)
-        msg1 = 'W. State estimate of time t before observation at time t: {}'.format(cur_stateprob)
+        msg0 = '   Log state estimate of time t before observation at time t: \n{}'.format(cur_fwd_est)
+        msg1 = 'W. State estimate of time t before observation at time t: \n{}'.format(cur_stateprob)
         self.logger.debug(msg0)
         self.logger.debug(msg1)
 
@@ -173,8 +183,9 @@ class HMMConf:
 
         logfwd = logobsprob + cur_fwd_est
         fwd = logfwd.copy()
-        utils.log_normalize(fwd, axis=1)
+        utils.log_normalize(fwd, axis=1) # to avoid underflow
         fwd = np.exp(fwd)
+        utils.normalize(fwd, axis=1) # to avoid not summing to 1 after exp
 
         conf_arr[self.FIRST_IND] = stateconf[0]
         conf_arr[self.SECOND_IND] = emitconf[0]
@@ -406,10 +417,12 @@ class HMMConf:
             #                             self.transcube_d, transcube)
             self.transcube_d = stats['trans'] + self.transcube_d
             utils.normalize(self.transcube_d, axis=2)
+            utils.assert_no_negatives('transcube_d', self.transcube_d)
 
         if 'o' in self.params:
             self.emitmat_d = stats['obs'] + self.emitmat_d
             utils.normalize(self.emitmat_d, axis=1)
+            utils.assert_no_negatives('emitmat_d', self.emitmat_d)
 
     def _compute_posteriors(self, fwdlattice, bwdlattice):
         log_gamma = fwdlattice + bwdlattice
