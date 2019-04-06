@@ -29,6 +29,20 @@ logging.config.dictConfig({
 })
 
 
+def assert_shape(name, expected, actual):
+    msg = """Shape difference in {name}
+             [expected]: {expected}
+             [actual]:   {actual}"""
+    msg = msg.format(name=name, 
+                     expected=expected, 
+                     actual=actual)
+    assert expected == actual, msg
+
+
+def make_logger(name):
+    return logging.getLogger(name)
+
+
 class Logged:
     def __init__(self, logger=None):
         self.logger = logger or logging.getLogger(__name__)
