@@ -18,7 +18,7 @@ MAX_RG_STATE = 1e6
 
 
 plt.switch_backend('TkAgg')
-print('matplotlib using backend: {}'.format(plt.get_backend()))
+# print('matplotlib using backend: {}'.format(plt.get_backend()))
 
 
 class Transition(object):
@@ -118,9 +118,9 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
 
 def collapse_inv_trans(rg, inv_states):
     for in_state, inv_tran, out_state in inv_states[::-1]:
-        print('In state: {}'.format(in_state))
-        print('Transition: {}'.format(inv_tran))
-        print('Out state: {}'.format(out_state))
+        # print('In state: {}'.format(in_state))
+        # print('Transition: {}'.format(inv_tran))
+        # print('Out state: {}'.format(out_state))
         # connect all incoming arcs to in_state to out_state
         inv_tran_weight = inv_tran.data['weight']
         in_state.outgoing.remove(inv_tran)
@@ -130,6 +130,13 @@ def collapse_inv_trans(rg, inv_states):
             # make new transition that connect in_state to out_tran.out_state
             data = {'weight': out_tran.data['weight'] * inv_tran_weight}
             add_arc_from_to(out_tran.name, in_state, out_tran.to_state, rg, data)
+
+        # remove out_state if it is no longer a reachable marking
+        if len(out_state.incoming) == 0:
+            rg.states.remove(out_state)
+            for out_tran in out_state.outgoing:
+                rg.transitions.remove(out_tran)
+                out_tran.to_state.incoming.remove(out_tran)
 
         rg.transitions.remove(inv_tran)
 
