@@ -3,6 +3,9 @@ from scipy.special import logsumexp
 import numpy as np
 
 
+np.set_printoptions(precision=10)
+
+
 # set standard logging configurations
 logging.config.dictConfig({
     'version': 1,
@@ -27,6 +30,33 @@ logging.config.dictConfig({
         }
     }
 })
+
+
+def assert_bounded(name, a, lower, upper):
+    msg = """Values of {name} are not in [{lower},{upper}]
+             [array]: {a}
+             <{lower}: {less}
+             >{upper}: {more}"""
+    less = np.sum(a < lower, axis=None)
+    more = np.sum(a > upper, axis=None)
+    if a.size == 1:
+        msg = msg.format(name=name, a=np.ravel(a)[0], 
+                        lower=lower, upper=upper,
+                        less=less, more=more)
+    else:
+        msg = msg.format(name=name, a=a, 
+                        lower=lower, upper=upper,
+                        less=less, more=more)
+    bounded = (a >= lower).all() and (a <= upper).all()
+    assert bounded.all(), msg
+
+
+def assert_no_negatives(name, a):
+    msg = """{} negative values in {}, expected 0:
+             [array]:   {}"""
+    n_neg = np.count_nonzero(a < 0)
+    msg = msg.format(n_neg, name, a)
+    assert n_neg == 0, msg
 
 
 def assert_shape(name, expected, actual):
