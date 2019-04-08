@@ -413,13 +413,26 @@ class HMMConf:
             utils.normalize(self.startprob, axis=1)
 
         if 't' in self.params:
-            # self.transcube_d = np.where(self.transcube_d == 0.,
-            #                             self.transcube_d, transcube)
+            # Note:
+            # It is technically incorrect to add the previous transcube_d to the newly estimated parameter
+            # values. However, this is practically necessary since we create parameter estimation updates
+            # for all value even if they did not appear in the sample data used for the EM update since
+            # we always loop over all parameter values for ease of implementation.
+            # For example, if transcube_d[a,i,j] does not appear in the EM data, our learnt parameter estimation would
+            # yield transcube_d[a,i,j] = 0 by default. With little sample data, this will mean that transcube_d will
+            # not be a probability matrix. This in turn will mess up state estimation if conformance = 0,
+            # because it will yield a zero vector.
+            # To avoid the above scenario, from get go we add the initially uniform probability matrix so
+            # that the resulting transcube_d will remain a probability matrix if a row has all 0s in the parameter
+            # estimation.
+            # In the contrary case where some value in row i transcube_d[a,i,j] has a non-zero parameter estimation,
+            # we will still get the same effect since we will normalize the row later anyway.
             self.transcube_d = stats['trans'] + self.transcube_d
-            utils.normalize(self.transcube_d, axis=2)
+            utils.normalize(self.transcube_d, axis=2)   # normalize row
             utils.assert_no_negatives('transcube_d', self.transcube_d)
 
         if 'o' in self.params:
+            # See the above explanation
             self.emitmat_d = stats['obs'] + self.emitmat_d
             utils.normalize(self.emitmat_d, axis=1)
             utils.assert_no_negatives('emitmat_d', self.emitmat_d)
