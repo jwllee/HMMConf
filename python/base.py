@@ -333,6 +333,8 @@ class HMMConf:
         """Updates sufficient statistics from a given sample.
 
         """
+        stats['nobs'] += 1
+
         if 's' in self.params:
             stats['start'] += posteriors[0]
 
