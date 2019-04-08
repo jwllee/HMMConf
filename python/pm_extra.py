@@ -117,6 +117,11 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
 
 
 def collapse_inv_trans(rg, inv_states):
+    """Collapse transition edges in reachability graph that correspond to invisible transitions and modify the adjacent edge probability weight accordingly.
+
+    :param rg: reachability graph
+    :param inv_states array_like: ordered list of tuples (in_state, inv_tran, out_state) such that earlier elements are ones were explored first during the breadth-first search that created the reachability graph.
+    """
     for in_state, inv_tran, out_state in inv_states[::-1]:
         # print('In state: {}'.format(in_state))
         # print('Transition: {}'.format(inv_tran))

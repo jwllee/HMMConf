@@ -9,9 +9,10 @@ def rg_to_nx_undirected(rg, map_nodes=False):
     """
     Convert reachability graph to networkx unweighted undirected graph.
 
-    :param: reachability graph
+    :param rg: reachability graph
     :type rg: pm4py.TransitionSystem
-    :return networkx undirected graph
+    :param map_nodes bool, optional: if ``True`` then map graph node names to int
+    :return networkx undirected graph, node2int mapping
     """
     assert isinstance(rg, ts.TransitionSystem)
 
@@ -30,12 +31,16 @@ def rg_to_nx_undirected(rg, map_nodes=False):
     return G, node_map
 
 
-def compute_distance_matrix(G, node_map, as_dataframe=False):
+def compute_distance_matrix(G, node2int, as_dataframe=False):
     """
     Assumes that G nodes are integers
+
+    :param G: graph
+    :param node2int dict: mapping from node name to int
+    :return state distance matrix
     """
     length = nx.all_pairs_dijkstra_path_length(G)
-    nb_nodes = len(node_map)
+    nb_nodes = len(node2int)
     dist = np.zeros(shape=(nb_nodes, nb_nodes))
 
     for src, length_dict in length:
@@ -43,7 +48,7 @@ def compute_distance_matrix(G, node_map, as_dataframe=False):
             dist[src, target] = length_dict[target]
 
     if as_dataframe:
-        nodes = [n[1] for n in sorted(node_map.items(), key=lambda pair: pair[1])]
+        nodes = [n[1] for n in sorted(node2int.items(), key=lambda pair: pair[1])]
         dist = pd.DataFrame(dist)
         dist.columns = nodes
         dist['u'] = nodes
@@ -52,29 +57,47 @@ def compute_distance_matrix(G, node_map, as_dataframe=False):
     return dist
 
 
-def compute_state_trans_cube(rg, state_map, obs_map, n_obs, n_states):
+def compute_state_trans_cube(rg, state2int, obs2int, n_obs, n_states):
+    """Computes the state transition probability cube from reachability graph.
+
+    :param rg: reachability graph
+    :param state2int dict: mapping from state name to integer
+    :param obs2int dict: mapping from observation to integer
+    :param n_obs int: number of observations
+    :param n_states int: number of states
+    :return: state transition probability cube
+    """
     cube = np.zeros((n_obs, n_states, n_states))
     
     for in_state in rg.states:
-        in_state_ind = state_map[in_state.name]
+        in_state_ind = state2int[in_state.name]
 
         for tran in in_state.outgoing:
-            obs_ind = obs_map[tran.name]
-            out_state_ind = state_map[tran.to_state.name]
+            obs_ind = obs2int[tran.name]
+            out_state_ind = state2int[tran.to_state.name]
 
             cube[obs_ind, in_state_ind, out_state_ind] += 1
 
     utils.normalize(cube, axis=2)
     return cube
 
-def compute_emission_mat(rg, state_map, obs_map, n_obs, n_states):
+def compute_emission_mat(rg, state2int, obs2int, n_obs, n_states):
+    """Computes the emission probability matrix from reachability graph.
+
+    :param rg: reachability graph
+    :param state2int dict: mapping from state name to integer
+    :param obs2int dict: mapping from observation to integer
+    :param n_obs int: number of observations
+    :param n_states int: number of states
+    :return: emission probability matrix
+    """
     emitmat = np.zeros((n_states, n_obs))
 
     for in_state in rg.states:
-        in_state_ind = state_map[in_state.name]
+        in_state_ind = state2int[in_state.name]
 
         for tran in in_state.outgoing:
-            obs_ind = obs_map[tran.name]
+            obs_ind = obs2int[tran.name]
             emitmat[in_state_ind, obs_ind] += 1.
 
     utils.normalize(emitmat, axis=1)
@@ -82,17 +105,30 @@ def compute_emission_mat(rg, state_map, obs_map, n_obs, n_states):
 
 
 def compute_conformance_mat(emitmat):
+    """Computes the conformance matrix which is boolean version of the emission probability
+    matrix such that C[i,j] is ``True`` if emitmat[i,j] > 0, and is ``False`` otherwise.
+
+    :param emitmat array_like: emission probability matrix
+    :return: conformance matrix
+    """
     return (emitmat > 0).astype(np.int).T
 
 
-def compute_startprob(rg, state_map, n_states):
+def compute_startprob(rg, state2int, n_states):
+    """Computes the initial state estimation which is a one-hot vector with point mass at the 
+    initial marking state.
+
+    :param rg: reachability graph
+    :param state2int dict: mapping from state name to integer
+    :param n_states int: number of states
+    """
     # initial marking is the only state without incoming
     init = list(filter(lambda s: len(s.incoming) == 0, rg.states))
 
     if len(init) != 1:
         raise ValueError('Number of states with 0 incoming transitions: {}'.format(len(init)))
 
-    ind = state_map[init[0].name]
+    ind = state2int[init[0].name]
     startprob = np.zeros((1, n_states))
     startprob[0, ind] = 1.
 

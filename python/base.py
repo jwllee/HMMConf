@@ -7,6 +7,19 @@ import utils, warnings, sys, time, string
 
 
 class ConvergenceMonitor:
+    """Monitors and reports convergence to :data:`sys.stderr`.
+
+    **Parameters**:
+    :param tol float: Convergence tolerence. EM has converged either if the maximum number of iterations is 
+                or the log probability improvement between two consecutive iterations is less than tol.
+    :param n_iter: Maximum number of iterations to perform.
+    :param verbose: If ``True`` then per-iteration convergence reports are printed, otherwise the 
+                    monitor is mute.
+
+    **Attributes**:
+    :param history deque: The log probability of the data for the last two training iterations. 
+    :param iter int: Number of iterations performed while training the model.
+    """
     _header = '{:>10s} {:>16s} {:>16s}'.format('iteration', 'logprob', 'delta')
     _template = "{iter:>10d} {logprob:>16.4f} {delta:>+16.4f}"
 
@@ -24,10 +37,20 @@ class ConvergenceMonitor:
         return "{}({})".format(class_name, _pprint(params, offset=len(class_name)))
 
     def _reset(self):
+        """Resets the monitor.
+        """
         self.iter = 0
         self.history.clear()
 
     def report(self, logprob):
+        """Report convergence to :data:`sys.stderr`.
+
+        The output consists of three columns: iteration number, log probability of the data
+        at the current iteration and convergence rate. At the first iteration convergence 
+        rate is unknown and is denoted as nan.
+
+        :param logprob float: Log likelihood of the data
+        """
         if self.verbose:
             delta = logprob - self.history[-1] if self.history else np.nan
             if not self.history:
@@ -44,6 +67,8 @@ class ConvergenceMonitor:
 
     @property
     def converged(self):
+        """``True`` if the EM algorithm converged and ``False`` otherwise.
+        """
         converged_ = (self.iter == self.n_iter or 
                      (len(self.history) == 2 and
                      self.history[1] - self.history[0] < self.tol))
@@ -51,6 +76,24 @@ class ConvergenceMonitor:
 
 
 class HMMConf:
+    """Modified HMM that computes the conformance of a stream of event data and updates state
+    estimation considering the previous state and conformance. The dynamic bayesian network is 
+    modified so that the next state depends on both the last state and last observation. 
+
+    **Parameters**:
+    :param startprob array_like: vector of initial state distribution
+    :param transcube array_like: cube denoting state-transition probability extracted from the reachability graph of net model
+    :param emitmat array_like: emission probability matrix extracted from the reachability graph of net model
+    :param distmat array_like: state distance matrix extracted from the reachability graph of net model
+    :param int2state dict: mapping from state index to state string representation
+    :param int2obs dict: mapping from observation index to observation string representation
+    :param n_states int: number of states in HMM
+    :param n_obs int: number of observation in HMM
+    :param params string, optional: Controls which parameters are updated during the training phase. Can contain any combination of 's' for startprob, 't' for transcube, and 'o' for emitmat. Defaults to 'to'.
+    :param n_iter int, optional: Maximum number of iterations to perform in EM parameter estimation
+    :param tol float, optional: The convergence threshold. EM will stop once the gain between iterations is below this value.
+    :param verbose bool: When ``True`` per-iteration convergence reports are printed to :data:`sys.stderr`. 
+    """
     FIRST_IND = 0
     SECOND_IND = 1
     UPDATED_IND = 2
@@ -82,6 +125,11 @@ class HMMConf:
         self.monitor = ConvergenceMonitor(self.tol, self.n_iter, self.verbose)
 
     def conform(self, stateprob, obs):
+        """Computes the conformance of an observation with respect to a state estimation.
+
+        :param stateprob array_like: state estimation vector that sums to 1.
+        :param obs int: observation
+        """
         utils.assert_shape('stateprob', (1, self.n_states), stateprob.shape)
 
         if not np.isclose(stateprob.sum(), [1.]):
@@ -97,8 +145,8 @@ class HMMConf:
         Computes P(x is obs at time t | z at time t) where x is the observation variable
         and z is the state variable. 
 
-        :param obs: observation at time t
-        :param conf: conformance between stateprob and obs
+        :param obs int: observation at time t
+        :param conf float: conformance between stateprob and obs
         """
         self.logger.debug('conform: {}'.format(conf))
         self.logger.debug('emitmat_d: {}'.format(self.emitmat_d[:,obs]))
@@ -110,8 +158,8 @@ class HMMConf:
         Computes P(z at time t | z at time t - 1, x is obs at time t - 1) where x is the observation
         variable and z is the state variable.
 
-        :param obs: observed activity at time t - 1
-        :param conf: conformance between stateprob and obs
+        :param obs int: observed activity at time t - 1
+        :param conf float: conformance between stateprob and obs
         """
         prob = conf * self.transcube[obs,:,:] + (1 - conf) * self.transcube_d[obs,:,:]
         utils.assert_no_negatives('transcube[{},:,:]'.format(obs), self.transcube[obs,:,:])
@@ -122,7 +170,10 @@ class HMMConf:
     def _forward(self, obs, prev_obs=None, prev_fwd=None):
         """Computes the log forward probability.
 
-        :return: log forward probability, conformance array
+        :param obs int: observation
+        :param prev_obs int, optional: previous observation if any
+        :param prev_fwd array_like, optional: previous log forward probability for all states
+        :return: log forward probability, conformance array, log state probability, log emission probability
         """
         conf_arr = np.full(3, -1.)
 
@@ -194,12 +245,23 @@ class HMMConf:
         return logfwd, conf_arr, logstateprob, logobsprob
 
     def forward(self, obs, prev_obs=None, prev_fwd=None):
+        """Computes the log forward probability.
+
+        :param obs int: observation
+        :param prev_obs int, optional: previous observation if any
+        :param prev_fwd array_like, optional: previous log forward probability for all states
+        :return: log forward probability, conformance array
+        """
         logfwd, conf_arr, _, _ = self._forward(obs, prev_obs, prev_fwd)
         return logfwd, conf_arr
 
     def backward(self, obs, prev_obs, conf_arr, prev_bwd=None):
         """Computes the log backward probability.
 
+        :param obs int: observation
+        :param prev_obs int: previous observation
+        :param conf_arr array_like: conformance vector computed for prev_obs using forward probability
+        :param prev_bwd array_like, optional: previous log backward probability 
         :return: log backward probability
         """
         emitprob = self.emissionprob(obs, conf_arr[1])
@@ -224,7 +286,7 @@ class HMMConf:
 
         :param X: array of observations
         :type X: array_like (n_samples, 1)
-        :return: the forward lattice, the conformance lattice, state-transition and observation lattice
+        :return: log likelihood, the forward lattice, the conformance lattice, state-transition and observation lattice
         """
         n_samples = X.shape[0]
         fwdlattice = np.ndarray((n_samples, self.n_states))
@@ -268,6 +330,13 @@ class HMMConf:
             return logprob, fwdlattice, conflattice, framelogstateprob, framelogobsprob
 
     def do_forward_pass(self, X):
+        """Computes the forward lattice containing the forward probability of a single sequence of
+        observations.
+
+        :param X: array of observations
+        :type X: array_like (n_samples, 1)
+        :return: log likelihood, the forward lattice, the conformance lattice
+        """
         logprob, fwdlattice, conflattice, logstateprob, logobsprob = self._do_forward_pass(X)
         return logprob, fwdlattice, conflattice
 
@@ -300,6 +369,12 @@ class HMMConf:
         return bwdlattice
 
     def fit(self, X, lengths):
+        """Estimate model parameters using EM.
+
+        :param X array_like, shape (n_samples, 1): sample data
+        :param lengths array_like, shape (n_sequences,): lengths of the individual sequences in ``X``. The sum of these should be ``n_samples``.
+        :return: ``self``
+        """
         self.monitor._reset()
 
         for it in range(self.n_iter):
@@ -332,6 +407,13 @@ class HMMConf:
                                           posteriors, fwdlattice, bwdlattice):
         """Updates sufficient statistics from a given sample.
 
+        :param stats dict: dictionary storing the sufficient statistics of the HMM 
+        :param logstateprob array_like: Log state probability at each time frame 1 to T
+        :param logobsprob array_like: Log observation probability at each time frame 1 to T
+        :param conflattice array_like: Conformance at each time frame 1 to T
+        :param posteriors array_like: Posterior likelihood at each time frame 1 to T
+        :param fwdlattice array_like: Log forward probability at each time frame 1 to T
+        :param bwdlattice array_like: Log backward probability at each time frame 1 to T
         """
         stats['nobs'] += 1
 
@@ -401,6 +483,10 @@ class HMMConf:
             np.divide(stats['obs'], denominator, out=stats['obs'], where=to_update)
 
     def _initialize_sufficient_statistics(self):
+        """Initialize sufficient statistics.
+
+        :return: sufficient statistics
+        """
         stats = {'nobs': 0,
                  'start': np.zeros(self.n_states),
                  'trans': np.zeros(self.transcube.shape),
@@ -408,6 +494,10 @@ class HMMConf:
         return stats
 
     def _do_mstep(self, stats):
+        """M step of EM 
+
+        :param stats dict: sufficient statistics
+        """
         if 's' in self.params:
             startprob = self.startprob + stats['start']
             self.startprob = np.where(self.startprob == 0.,
@@ -418,15 +508,15 @@ class HMMConf:
             # Note:
             # It is technically incorrect to add the previous transcube_d to the newly estimated parameter
             # values. However, this is practically necessary since we create parameter estimation updates
-            # for all value even if they did not appear in the sample data used for the EM update since
-            # we always loop over all parameter values for ease of implementation.
-            # For example, if transcube_d[a,i,j] does not appear in the EM data, our learnt parameter estimation would
-            # yield transcube_d[a,i,j] = 0 by default. With little sample data, this will mean that transcube_d will
-            # not be a probability matrix. This in turn will mess up state estimation if conformance = 0,
-            # because it will yield a zero vector.
+            # for all value even if they did not appear in the sample data used for the EM update since 
+            # we always loop over all parameter values for ease of implementation. 
+            # For example, if transcube_d[a,i,j] does not appear in the EM data, our learnt parameter estimation would 
+            # yield transcube_d[a,i,j] = 0 by default. With little sample data, this will mean that transcube_d will 
+            # not be a probability matrix. This in turn will mess up state estimation if conformance = 0, 
+            # because it will yield a zero vector. 
             # To avoid the above scenario, from get go we add the initially uniform probability matrix so
             # that the resulting transcube_d will remain a probability matrix if a row has all 0s in the parameter
-            # estimation.
+            # estimation. 
             # In the contrary case where some value in row i transcube_d[a,i,j] has a non-zero parameter estimation,
             # we will still get the same effect since we will normalize the row later anyway.
             self.transcube_d = stats['trans'] + self.transcube_d
@@ -440,6 +530,11 @@ class HMMConf:
             utils.assert_no_negatives('emitmat_d', self.emitmat_d)
 
     def _compute_posteriors(self, fwdlattice, bwdlattice):
+        """Posterior likelihood of states given data.
+
+        :param fwdlattice array_like: log forward probability 
+        :param bwdlattice array_like: log backward probability
+        """
         log_gamma = fwdlattice + bwdlattice
         utils.log_normalize(log_gamma, axis=1)  # this prevents underflow
         with np.errstate(under='ignore'):
