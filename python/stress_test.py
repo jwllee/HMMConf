@@ -2,7 +2,7 @@ import numpy as np
 import pandas as pd
 import time, os
 
-import base, slac_setup, pm_extra, tracker
+import base, lac_setup, pm_extra, tracker
 from pm4py.objects.petri.importer import pnml as pnml_importer
 
 
@@ -49,8 +49,8 @@ def process_net(net, init_marking, final_marking):
 
 
 def setup_hmm(rg):
-    G, node_map = slac_setup.rg_to_nx_undirected(rg, map_nodes=True)
-    dist_df = slac_setup.compute_distance_matrix(G, node_map, as_dataframe=True)
+    G, node_map = lac_setup.rg_to_nx_undirected(rg, map_nodes=True)
+    dist_df = lac_setup.compute_distance_matrix(G, node_map, as_dataframe=True)
     distmat = dist_df.values
     # print('Distance df: \n{}'.format(dist_df))
 
@@ -60,10 +60,10 @@ def setup_hmm(rg):
     n_obs = len(obsmap)
     n_states = len(node_map)
 
-    transcube = slac_setup.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
-    emitmat = slac_setup.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
-    confmat = slac_setup.compute_conformance_mat(emitmat)
-    startprob = slac_setup.compute_startprob(rg, node_map, n_states)
+    transcube = lac_setup.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
+    emitmat = lac_setup.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
+    confmat = lac_setup.compute_conformance_mat(emitmat)
+    startprob = lac_setup.compute_startprob(rg, node_map, n_states)
 
     hmm = base.HMMConf(startprob, transcube, emitmat, confmat, distmat, 
                        int2state, int2obs, n_states, n_obs, 
@@ -105,16 +105,19 @@ if __name__ == '__main__':
     print('Make conformance tracker...')
     tracker = make_conformance_tracker(hmm)
 
-    caseids = data_df[CASEID].unique()[:10]
-    caseids = ['case_34'] # warm start example
+    caseids = data_df[CASEID].unique()[:100]
     to_include = data_df[CASEID].isin(caseids)
+    caseids = ['case_34'] # warm start example
+    em_to_include = data_df[CASEID].isin(caseids)
+
+    em_filtered_df = data_df.loc[em_to_include,:]
     filtered_df = data_df.loc[to_include,:]
 
     print('data df shape: {}'.format(filtered_df.shape))
 
     # EM training
     print('EMing...')
-    X, lengths = event_df_to_hmm_format(filtered_df)
+    X, lengths = event_df_to_hmm_format(em_filtered_df)
     tracker.hmm.fit(X, lengths)
 
     i = 0
