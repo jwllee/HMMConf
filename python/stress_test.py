@@ -127,8 +127,10 @@ if __name__ == '__main__':
         event = row.activity_id
         act = row.activity
 
-        score, state = tracker.replay_event(caseid, event)
-        print('{} replay {:<11}: {:.2f}, {}'.format(caseid, act, score[2], state))
+        conf, state, complete = tracker.replay_event(caseid, event)
+        msg = '{} replay {:<11}: conf: {:.2f}, compl: {:.2f}, {}'
+        msg = msg.format(caseid, act, conf[2], complete, state)
+        print(msg)
 
         # time.sleep(0.1)
 
