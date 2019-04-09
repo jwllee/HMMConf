@@ -213,9 +213,10 @@ class HMMConf:
 
         # some helpful loggings during development...
         arr_buffer = cur_fwd_est.copy()
-        utils.log_normalize(arr_buffer, axis=1) 
+        utils.log_normalize(arr_buffer, axis=1) # to avoid underflow
         # P(Z_t | X_{1:t} = x_{1:t}), i.e. normalized forward probability at time t
         cur_stateprob = np.exp(arr_buffer)
+        utils.normalize(cur_stateprob, axis=1) # to avoid not summing to 1 after exp
 
         msg0 = '   Log state estimate of time t before observation at time t: \n{}'.format(cur_fwd_est)
         msg1 = 'W. State estimate of time t before observation at time t: \n{}'.format(cur_stateprob)
