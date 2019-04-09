@@ -540,3 +540,59 @@ class HMMConf:
         utils.log_normalize(log_gamma, axis=1)  # this prevents underflow
         with np.errstate(under='ignore'):
             return np.exp(log_gamma)
+
+    def compute_expected_distance(self, obs, logfwd, 
+                                  prev_obs=None, prev_logfwd=None):
+        """Compute expected distance between current state estimation derived from log forward probability and initial state estimation.
+
+        :param obs int: observation
+        :param logfwd array_like: log forward probability
+        :param prev_obs int: previous observation
+        :param prev_logfwd array_like: previous log forward probability
+        :return: expected distance
+        :rtype: float
+        """
+        if prev_obs is None:
+            emitconf = self.conform(self.startprob, obs)
+            obsprob = self.emissionprob(obs, emitconf)
+            logobsprob = utils.log_mask_zero(obsprob)
+            work_buffer = logfwd.copy()
+            utils.log_normalize(work_buffer, axis=1)
+            work_buffer = np.exp(work_buffer)[:,np.newaxis]
+            work_buffer = self.distmat * work_buffer
+            return work_buffer.sum(axis=None)
+
+        arr_buffer = prev_logfwd.copy()
+        utils.log_normalize(arr_buffer, axis=1) # to avoid underflow
+        # P(Z_{t-1} | X_{1:t-1} = x_{1:t-1}), i.e., normalized forward probability at time t  - 1
+        prev_stateprob = np.exp(arr_buffer)
+        utils.normalize(prev_stateprob, axis=1) # to avoid not summing to 1 after exp
+
+        # w_{i,j}(x_t)
+        stateconf = self.conform(prev_stateprob, prev_obs)
+        stateprob = self.stateprob(prev_obs, stateconf)
+        logstateprob = utils.log_mask_zero(stateprob)
+
+        # v_{j}(x_{t+1})
+        work_buffer = logstateprob.T + prev_logfwd
+        cur_fwd_est = logsumexp(work_buffer, axis=1)
+        cur_fwd_est = cur_fwd_est.reshape([1, self.n_states])
+        arr_buffer = cur_fwd_est.copy()
+        utils.log_normalize(arr_buffer, axis=1) 
+        # P(Z_t | X_{1:t} = x_{1:t}), i.e. normalized forward probability at time t
+        cur_stateprob = np.exp(arr_buffer)
+        utils.normalize(cur_stateprob, axis=1) 
+        emitconf = self.conform(cur_stateprob, obs)
+        obsprob = self.emissionprob(obs, emitconf)
+        logobsprob = utils.log_mask_zero(obsprob)[np.newaxis,:]
+        prev_logfwd = prev_logfwd.ravel()[:,np.newaxis]
+
+        utils.assert_shape('logobsprob', (1, self.n_states), logobsprob.shape)
+        utils.assert_shape('logstateprob', (self.n_states, self.n_states), logstateprob.shape)
+        utils.assert_shape('prev_logfwd', (self.n_states, 1), prev_logfwd.shape)
+
+        work_buffer = logobsprob + logstateprob + prev_logfwd - logsumexp(logfwd, axis=1)
+        work_buffer = np.exp(work_buffer)
+        utils.assert_shape('node pmf', self.distmat.shape, work_buffer.shape)
+        work_buffer = np.multiply(self.distmat, work_buffer)
+        return work_buffer.sum(axis=None)
