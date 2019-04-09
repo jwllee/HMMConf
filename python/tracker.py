@@ -21,6 +21,7 @@ class ConformanceStatus:
     :param last_update datetime: last time that the case received an event, ``None`` at the initialization
     :param conformance_history list: list of previous conformance results
     :param activity_history list: list of previous activity for the case
+    :param n_events int: number of events in case
     """
     # @todo: add last distance
     def __init__(self, startprob, int2state, int2obs, max_history=1):
@@ -30,8 +31,10 @@ class ConformanceStatus:
         self.int2obs = int2obs
         self.last_update = None
         self.max_history = max_history
+        self.completeness_history = []
         self.conformance_history = []
         self.activity_history = []
+        self.n_events = 0
 
     @property
     def most_likely_state(self):
@@ -45,13 +48,14 @@ class ConformanceStatus:
         """
         return self.activity_history[-1] if len(self.activity_history) > 0 else None
 
-    def update(self, act, logfwd, conf_arr):
+    def update(self, act, logfwd, conf_arr, comp):
         """Updates the conformance status of the case.
 
         :param act int: current activity of the case
         :param logfwd array_like: updated log forward probability following the current activity
         :param conf_arr array_like: conformance array for the current activity
         """
+        self.n_events += 1
         self.logfwd = logfwd
         self.state_est = logfwd.copy()
         utils.log_normalize(self.state_est, axis=1)
@@ -60,10 +64,12 @@ class ConformanceStatus:
         self.last_update = dt.now()
         self.activity_history.append(act)
         self.conformance_history.append(conf_arr)
+        self.completeness_history.append(comp)
 
         if len(self.activity_history) > self.max_history:
             self.activity_history.pop(0)
             self.conformance_history.pop(0)
+            self.completeness_history.pop(0)
 
 
 class ConformanceTracker(dict):
@@ -93,19 +99,26 @@ class ConformanceTracker(dict):
         """
         if caseid in self:
             status = self[caseid]
-            logfwd, conf_arr = self.hmm.forward(event, status.last_activity, status.logfwd)
-            status.update(event, logfwd, conf_arr)
+            prev_obs = status.last_activity
+            prev_logfwd = status.logfwd
             self.caseid_history.remove(caseid)
         else:
             if (len(self.caseid_history) >= self.max_n_case):
                 to_remove = self.caseid_history.popleft()
                 del self[to_remove]
-
-            status = ConformanceStatus(self.hmm.startprob, self.hmm.int2state, self.hmm.int2obs)
+            status = ConformanceStatus(self.hmm.startprob, 
+                                       self.hmm.int2state, 
+                                       self.hmm.int2obs)
             self[caseid] = status
-            logfwd, conf_arr = self.hmm.forward(event)
-            status.update(event, logfwd, conf_arr)
+            prev_obs, prev_logfwd = None, None
+
+        logfwd, conf_arr = self.hmm.forward(event, prev_obs, prev_logfwd)
+        exp_dist = self.hmm.compute_expected_distance(event, logfwd,
+                                                      prev_obs, prev_logfwd)
+        complete = (status.n_events + 1) / (exp_dist + 1)
+        complete = min(1., complete)
+        status.update(event, logfwd, conf_arr, complete)
 
         # current_score = conf_arr[2]
         self.caseid_history.appendleft(caseid)
-        return conf_arr, status.most_likely_state
+        return conf_arr, status.most_likely_state, complete
