@@ -5,6 +5,9 @@ import numpy as np
 import pandas as pd
 
 
+logger = utils.make_logger(__file__)
+
+
 def rg_to_nx_undirected(rg, map_nodes=False):
     """
     Convert reachability graph to networkx unweighted undirected graph.
@@ -47,6 +50,11 @@ def compute_distance_matrix(G, node2int, as_dataframe=False):
         for target in range(nb_nodes):
             dist[src, target] = length_dict[target]
 
+    dist_min, dist_max, dist_mean, dist_std = np.min(dist), np.max(dist), np.mean(dist), np.std(dist)
+    logger.info('dist mat min: {}, max: {}, mean: {:.2f}, std: {:.2f}'.format(dist_min,
+                                                                              dist_max,
+                                                                              dist_mean,
+                                                                              dist_std))
     if as_dataframe:
         nodes = [n[1] for n in sorted(node2int.items(), key=lambda pair: pair[1])]
         dist = pd.DataFrame(dist)
