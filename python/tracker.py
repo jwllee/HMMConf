@@ -90,6 +90,19 @@ class ConformanceTracker(dict):
         self.caseid_history = deque(maxlen=max_n_case)
         self.logger = utils.make_logger(self.__class__.__name__)
 
+    def __compute_completeness(self, n_events, logfwd):
+        initstate = self.hmm.startprob
+        dist_from_initstate = self.hmm.compute_distance_from_initstate(initstate, logfwd)
+        complete = (n_events + 1) / (dist_from_initstate + 1)
+        complete = min(1., complete)
+        return complete
+
+    def __compute_mode_dist(self, logfwd, prev_logfwd):
+        most_likely_state = np.argmax(logfwd)
+        prev_most_likely_state = np.argmax(self.hmm.startprob) if prev_logfwd is None else np.argmax(prev_logfwd)
+        mode_dist = self.hmm.distmat[prev_most_likely_state,most_likely_state]
+        return mode_dist
+
     def replay_event(self, caseid, event):
         """Replays event of caseid.
 
