@@ -25,15 +25,21 @@ class ConformanceStatus:
     """
     # @todo: add last distance
     def __init__(self, startprob, int2state, int2obs, max_history=1):
+        self.startprob = startprob
         self.logfwd = utils.log_mask_zero(startprob)
         self.state_est = startprob
         self.int2state = int2state
         self.int2obs = int2obs
         self.last_update = None
         self.max_history = max_history
-        self.completeness_history = []
-        self.conformance_history = []
-        self.activity_history = []
+        self.completeness_history = deque(maxlen=max_history)
+        self.conformance_history = deque(maxlen=max_history)
+        self.activity_history = deque(maxlen=max_history)
+        self.inc_dist_history = deque(maxlen=max_history)
+        self.mode_dist_history = deque(maxlen=max_history)
+        self.state_est_history = deque(maxlen=max_history)
+        self.sum_dist = 0.
+        self.sum_mode_dist = 0.
         self.n_events = 0
 
     @property
@@ -43,33 +49,39 @@ class ConformanceStatus:
         return self.int2state[np.argmax(self.state_est, axis=1)[0]]
 
     @property
+    def likelihood_mode(self):
+        return np.max(self.state_est)
+
+    @property
     def last_activity(self):
         """Most recent activity related to the case.
         """
         return self.activity_history[-1] if len(self.activity_history) > 0 else None
 
-    def update(self, act, logfwd, conf_arr, comp):
+    def update(self, act, logfwd, conf_arr, complete, inc_dist, mode_inc_dist):
         """Updates the conformance status of the case.
 
         :param act int: current activity of the case
         :param logfwd array_like: updated log forward probability following the current activity
         :param conf_arr array_like: conformance array for the current activity
+        :param complete float: completenss compared with the initial marking
+        :param inc_dist float: expected incremental distance
+        :param mode_inc_dist float: incremental distance between most likely states from time t and t - 1
         """
         self.n_events += 1
-        self.logfwd = logfwd
+        self.logfwd = logfwd.copy()
         self.state_est = logfwd.copy()
-        utils.log_normalize(self.state_est, axis=1)
-        self.state_est = np.exp(self.state_est)
+        utils.exp_log_normalize(self.state_est, axis=1)
 
         self.last_update = dt.now()
+        self.state_est_history.append(self.state_est)
         self.activity_history.append(act)
         self.conformance_history.append(conf_arr)
-        self.completeness_history.append(comp)
-
-        if len(self.activity_history) > self.max_history:
-            self.activity_history.pop(0)
-            self.conformance_history.pop(0)
-            self.completeness_history.pop(0)
+        self.completeness_history.append(complete)
+        self.inc_dist_history.append(inc_dist)
+        self.mode_dist_history.append(mode_inc_dist)
+        self.sum_dist += max(0, inc_dist - 1)
+        self.sum_mode_dist += max(0, mode_inc_dist - 1)
 
 
 class ConformanceTracker(dict):
