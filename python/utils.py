@@ -120,6 +120,13 @@ def log_normalize(a, axis=None):
     # msg = msg.format(summed[np.invert(almost_one)])
     # assert almost_one.all(), msg
 
+
+def exp_log_normalize(a, axis=None):
+    log_normalize(a, axis=axis)
+    np.exp(a, out=a)
+    normalize(a, axis=axis)
+
+
 def iter_from_X_lengths(X, lengths):
     """Iterate through the start and end indexes of subsequences in input array where the subsequences are explicitly specified.
 
