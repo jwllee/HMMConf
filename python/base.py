@@ -156,8 +156,8 @@ class HMMConf:
         :param obs int: observation at time t
         :param conf float: conformance between stateprob and obs
         """
-        self.logger.info('conform: {}'.format(conf))
-        self.logger.info('emitmat_d: \n{}'.format(self.emitmat_d[:,obs]))
+        self.logger.debug('conform: {}'.format(conf))
+        self.logger.debug('emitmat_d: \n{}'.format(self.emitmat_d[:,obs]))
         prob = conf * self.emitmat[:,obs] + (1 - conf) * self.emitmat_d[:,obs]
         return prob
 
@@ -189,28 +189,27 @@ class HMMConf:
             self.logger.debug('startprob: {}'.format(self.startprob))
             emitconf = self.conform(self.startprob, obs)
             obsprob = self.emissionprob(obs, emitconf)
-            logobsprob = utils.log_mask_zero(obsprob)
-            logfwd = utils.log_mask_zero(self.startprob) + logobsprob
 
             # n_nonzeros = np.count_nonzero(obsprob)
             # self.logger.info('Number of non-zeros (obsprob): {}'.format(n_nonzeros))
             # self.logger.info('Max obs prob: {} at {}'.format(obsprob.max(), np.argmax(obsprob)))
+            
+            logobsprob = utils.log_mask_zero(obsprob)[np.newaxis,:]
+            logstartprob = utils.log_mask_zero(self.startprob)
             # utils.assert_shape('logobsprob', (1, self.n_states), logobsprob.shape)
             # utils.assert_shape('startprob', (1, self.n_states), logstartprob.shape)
+            logfwd = logstartprob + logobsprob
             fwd = logfwd.copy()
-            utils.log_normalize(fwd, axis=1) # to avoid underflow
-            fwd = np.exp(fwd)
-            utils.normalize(fwd, axis=1) # to avoid not summing to 1 after exp
+            utils.exp_log_normalize(fwd, axis=1)
             conf_arr[self.SECOND_IND] = emitconf[0]
             conf_arr[self.UPDATED_IND] = self.conform(fwd, obs)
-            logstateprob = np.full((self.transcube.shape[1], self.transcube.shape[1]), -np.inf)
+            logstateprob = np.full((self.transcube.shape[1], self.transcube.shape[1]), -np.inf) # zero everything
             return logfwd, conf_arr, logstateprob, logobsprob
 
-        arr_buffer = prev_fwd.copy()
-        utils.log_normalize(arr_buffer, axis=1) # to avoid underflow
         # P(Z_{t-1} | X_{1:t-1} = x_{1:t-1}), i.e., normalized forward probability at time t  - 1
-        prev_stateprob = np.exp(arr_buffer)
-        utils.normalize(prev_stateprob, axis=1) # to avoid not summing to 1 after exp
+        prev_stateprob = prev_fwd.copy()
+        utils.exp_log_normalize(prev_stateprob, axis=1)
+
         stateconf = self.conform(prev_stateprob, prev_obs)
         stateprob = self.stateprob(prev_obs, stateconf)
         logstateprob = utils.log_mask_zero(stateprob)
@@ -227,11 +226,8 @@ class HMMConf:
         cur_fwd_est = cur_fwd_est.reshape([1, self.n_states])
 
         # some helpful loggings during development...
-        arr_buffer = cur_fwd_est.copy()
-        utils.log_normalize(arr_buffer, axis=1) # to avoid underflow
-        # P(Z_t | X_{1:t} = x_{1:t}), i.e. normalized forward probability at time t
-        cur_stateprob = np.exp(arr_buffer)
-        utils.normalize(cur_stateprob, axis=1) # to avoid not summing to 1 after exp
+        cur_stateprob = cur_fwd_est.copy()
+        utils.exp_log_normalize(cur_stateprob, axis=1)
 
         msg0 = '   Log state estimate of time t before observation at time t: \n{}'
         msg1 = 'W. State estimate of time t before observation at time t: \n{}'
@@ -252,9 +248,7 @@ class HMMConf:
 
         logfwd = logobsprob + cur_fwd_est
         fwd = logfwd.copy()
-        utils.log_normalize(fwd, axis=1) # to avoid underflow
-        fwd = np.exp(fwd)
-        utils.normalize(fwd, axis=1) # to avoid not summing to 1 after exp
+        utils.exp_log_normalize(fwd, axis=1)
 
         conf_arr[self.FIRST_IND] = stateconf[0]
         conf_arr[self.SECOND_IND] = emitconf[0]
@@ -536,7 +530,7 @@ class HMMConf:
 
         col_sum = self.emitmat_d.sum(axis=0)
         col_ind = np.argwhere(col_sum == 0.).ravel()
-        errmsg = 'emitmat_d has columns that sum to zero'.format(o)
+        errmsg = 'emitmat_d has columns that sum to zero'
         assert col_ind.shape[0] == 0, errmsg
 
     def _do_mstep(self, stats):
@@ -571,13 +565,13 @@ class HMMConf:
             #     row_ind = np.argwhere(row_sum == 0.).ravel()
             #     stats['trans'][o,row_ind,:] = self.transcube_d[o,row_ind,:]
 
-            #     # can overfit if EM samples does not contain some states so that the
+            #     # can overfit if EM samples does not contain some states so that the 
             #     # unobserved states has 0 over all states, i.e., never transitioned to
             #     # Avoid this by adding an epsilon probability
             #     col_sum = stats['trans'].sum(axis=0)
             #     col_ind = np.argwhere(col_sum == 0.).ravel()
             #     stats['trans'][o,:,col_ind] += 1e-4
-            self.transcube_d = stats['trans']
+            self.transcube_d = stats['trans'] 
             utils.normalize(self.transcube_d, axis=2)   # normalize row
 
         if 'o' in self.params:
@@ -586,7 +580,7 @@ class HMMConf:
             row_ind = np.argwhere(row_sum == 0.).ravel()
             stats['obs'][row_ind,:] = self.emitmat_d[row_ind,:]
 
-            # Can overfit if EM samples does not contain some observations so that the
+            # Can overfit if EM samples does not contain some observations so that the 
             # unobserved observation has 0 over all states, i.e., never observable
             # Avoid this by adding an epsilon probability
             col_sum = stats['obs'].sum(axis=0)
@@ -620,7 +614,7 @@ class HMMConf:
         dist = np.sum(work_buffer, axis=None)
         return dist
 
-    def compute_expected_inc_distance(self, obs, logfwd,
+    def compute_expected_inc_distance(self, obs, logfwd, 
                                   prev_obs=None, prev_logfwd=None):
         """Compute expected distance between current state estimation derived from log forward probability and previous state estimation.
 
