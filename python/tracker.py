@@ -138,12 +138,16 @@ class ConformanceTracker(dict):
             prev_obs, prev_logfwd = None, None
 
         logfwd, conf_arr = self.hmm.forward(event, prev_obs, prev_logfwd)
-        exp_dist = self.hmm.compute_expected_distance(event, logfwd,
-                                                      prev_obs, prev_logfwd)
-        complete = (status.n_events + 1) / (exp_dist + 1)
-        complete = min(1., complete)
-        status.update(event, logfwd, conf_arr, complete)
+        exp_inc_dist = self.hmm.compute_expected_inc_distance(event, logfwd,
+                                                              prev_obs, prev_logfwd)
+        mode_dist = self.__compute_mode_dist(logfwd, prev_logfwd)
+        complete = self.__compute_completeness(status.n_events, logfwd)
 
-        # current_score = conf_arr[2]
+        status.update(event, logfwd, conf_arr, complete, exp_inc_dist, mode_dist)
         self.caseid_history.appendleft(caseid)
-        return conf_arr, status.most_likely_state, complete
+
+        score = (conf_arr, status.most_likely_state,
+                 status.likelihood_mode, complete, 
+                 exp_inc_dist, mode_dist, 
+                 status.sum_dist, status.sum_mode_dist)
+        return score
