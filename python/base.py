@@ -156,8 +156,8 @@ class HMMConf:
         :param obs int: observation at time t
         :param conf float: conformance between stateprob and obs
         """
-        self.logger.debug('conform: {}'.format(conf))
-        self.logger.debug('emitmat_d: {}'.format(self.emitmat_d[:,obs]))
+        self.logger.info('conform: {}'.format(conf))
+        self.logger.info('emitmat_d: \n{}'.format(self.emitmat_d[:,obs]))
         prob = conf * self.emitmat[:,obs] + (1 - conf) * self.emitmat_d[:,obs]
         return prob
 
@@ -170,9 +170,9 @@ class HMMConf:
         :param conf float: conformance between stateprob and obs
         """
         prob = conf * self.transcube[obs,:,:] + (1 - conf) * self.transcube_d[obs,:,:]
-        utils.assert_no_negatives('transcube[{},:,:]'.format(obs), self.transcube[obs,:,:])
-        utils.assert_no_negatives('transcube_d[{},:,:]'.format(obs), self.transcube_d[obs,:,:])
-        utils.assert_no_negatives('stateprob, conform: {}'.format(conf), prob)
+        # utils.assert_no_negatives('transcube[{},:,:]'.format(obs), self.transcube[obs,:,:])
+        # utils.assert_no_negatives('transcube_d[{},:,:]'.format(obs), self.transcube_d[obs,:,:])
+        # utils.assert_no_negatives('stateprob, conform: {}'.format(conf), prob)
         return prob
 
     def _forward(self, obs, prev_obs=None, prev_fwd=None):
@@ -191,6 +191,12 @@ class HMMConf:
             obsprob = self.emissionprob(obs, emitconf)
             logobsprob = utils.log_mask_zero(obsprob)
             logfwd = utils.log_mask_zero(self.startprob) + logobsprob
+
+            # n_nonzeros = np.count_nonzero(obsprob)
+            # self.logger.info('Number of non-zeros (obsprob): {}'.format(n_nonzeros))
+            # self.logger.info('Max obs prob: {} at {}'.format(obsprob.max(), np.argmax(obsprob)))
+            # utils.assert_shape('logobsprob', (1, self.n_states), logobsprob.shape)
+            # utils.assert_shape('startprob', (1, self.n_states), logstartprob.shape)
             fwd = logfwd.copy()
             utils.log_normalize(fwd, axis=1) # to avoid underflow
             fwd = np.exp(fwd)
@@ -208,16 +214,17 @@ class HMMConf:
         stateconf = self.conform(prev_stateprob, prev_obs)
         stateprob = self.stateprob(prev_obs, stateconf)
         logstateprob = utils.log_mask_zero(stateprob)
-        n_nonzeros = np.count_nonzero(stateprob)
-        self.logger.debug('No. non-zero vals: {}'.format(n_nonzeros))
+
+        # n_nonzeros = np.count_nonzero(stateprob)
+        # self.logger.debug('No. non-zero vals: {}'.format(n_nonzeros))
         self.logger.debug('Previous fwd: \n{}'.format(prev_fwd))
         self.logger.debug('state prob: \n{}'.format(stateprob))
         self.logger.debug('log state prob: \n{}'.format(logstateprob))
+
         work_buffer = logstateprob.T + prev_fwd
-        self.logger.debug('No. nan vals: {}'.format(np.count_nonzero(np.isnan(work_buffer))))
+        # self.logger.debug('No. nan vals: {}'.format(np.count_nonzero(np.isnan(work_buffer))))
         cur_fwd_est = logsumexp(work_buffer, axis=1)
         cur_fwd_est = cur_fwd_est.reshape([1, self.n_states])
-        # print('Current fwd est.: {}'.format(work_buffer))
 
         # some helpful loggings during development...
         arr_buffer = cur_fwd_est.copy()
@@ -226,8 +233,10 @@ class HMMConf:
         cur_stateprob = np.exp(arr_buffer)
         utils.normalize(cur_stateprob, axis=1) # to avoid not summing to 1 after exp
 
-        msg0 = '   Log state estimate of time t before observation at time t: \n{}'.format(cur_fwd_est)
-        msg1 = 'W. State estimate of time t before observation at time t: \n{}'.format(cur_stateprob)
+        msg0 = '   Log state estimate of time t before observation at time t: \n{}'
+        msg1 = 'W. State estimate of time t before observation at time t: \n{}'
+        msg0 = msg0.format(cur_fwd_est)
+        msg1 = msg1.format(cur_stateprob)
         self.logger.debug(msg0)
         self.logger.debug(msg1)
 
@@ -236,9 +245,9 @@ class HMMConf:
         logobsprob = utils.log_mask_zero(obsprob)
 
         msg2 = 'Likelihood of observation at states time t: {}'.format(obsprob)
-        self.logger.debug(msg2)
         msg3 = 'Conformance between state and observation at time t ' \
               'before observation adjustment: {:.2f}'.format(emitconf[0])
+        self.logger.debug(msg2)
         self.logger.debug(msg3)
 
         logfwd = logobsprob + cur_fwd_est
@@ -332,7 +341,7 @@ class HMMConf:
             prev_obs = obs
             prev_fwd = fwd
 
-        self.logger.debug('Average forward probability time: {:.4f}s'.format(np.mean(times)))
+        # self.logger.debug('Average forward probability time: {:.4f}s'.format(np.mean(times)))
 
         with np.errstate(under='ignore'):
             logprob = logsumexp(fwdlattice[-1])
