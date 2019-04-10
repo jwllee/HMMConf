@@ -521,12 +521,23 @@ class HMMConf:
             errmsg = 'transmat_d{} does not sum to almost 1: {}'.format(o, error_rows)
             assert almost_one.all(), errmsg
 
+            col_sum = transmat.sum(axis=0)
+            col_ind = np.argwhere(col_sum == 0.).ravel()
+            errmsg = 'transmat_d{} has columns that sum to zero'.format(o)
+            assert col_ind.shape[0] == 0, errmsg
+
+
     def __check_emitmat(self):
         sumframe = self.emitmat_d.sum(axis=1)
         almost_one = np.isclose(sumframe, np.ones(self.n_states))
         error_rows = sumframe[np.invert(almost_one)]
         errmsg = 'emitmat_d does not sum to 1 to almost 1: {}'.format(error_rows)
         assert almost_one.all(), errmsg
+
+        col_sum = self.emitmat_d.sum(axis=0)
+        col_ind = np.argwhere(col_sum == 0.).ravel()
+        errmsg = 'emitmat_d has columns that sum to zero'.format(o)
+        assert col_ind.shape[0] == 0, errmsg
 
     def _do_mstep(self, stats):
         """M step of EM 
