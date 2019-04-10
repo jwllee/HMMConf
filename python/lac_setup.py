@@ -51,7 +51,7 @@ def compute_distance_matrix(G, node2int, as_dataframe=False):
             dist[src, target] = length_dict[target]
 
     dist_min, dist_max, dist_mean, dist_std = np.min(dist), np.max(dist), np.mean(dist), np.std(dist)
-    logger.info('dist mat min: {}, max: {}, mean: {:.2f}, std: {:.2f}'.format(dist_min,
+    logger.info('dist mat min: {}, max: {}, mean: {:.2f}, std: {:.2f}'.format(dist_min, 
                                                                               dist_max,
                                                                               dist_mean,
                                                                               dist_std))
