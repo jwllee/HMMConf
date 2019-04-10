@@ -94,6 +94,12 @@ def normalize(a, axis=None):
 
     a /= a_sum
 
+    # summed = a.sum(axis)
+    # almost_one = np.isclose(summed, np.ones(summed.shape))
+    # msg = 'Normalize not summing close to 1: {}'
+    # msg = msg.format(summed[np.invert(almost_one)])
+    # assert almost_one.all(), msg
+
 
 def log_normalize(a, axis=None):
     """Normalizes the input array so that the exponent of the sum is 1.
@@ -107,6 +113,12 @@ def log_normalize(a, axis=None):
         # print('logsumexp: {}'.format(a_lse))
     a -= a_lse[:, np.newaxis]
 
+    # check it's actually normalized
+    # summed = logsumexp(a, axis=axis)
+    # almost_one = np.isclose(summed, np.ones(summed.shape))
+    # msg = 'Log normalize not summing close to 1: {}'
+    # msg = msg.format(summed[np.invert(almost_one)])
+    # assert almost_one.all(), msg
 
 def iter_from_X_lengths(X, lengths):
     """Iterate through the start and end indexes of subsequences in input array where the subsequences are explicitly specified.
