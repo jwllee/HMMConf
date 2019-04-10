@@ -6,6 +6,9 @@ import pandas as pd
 import utils, warnings, sys, time, string
 
 
+np.set_printoptions(precision=16)
+
+
 class ConvergenceMonitor:
     """Monitors and reports convergence to :data:`sys.stderr`.
 
