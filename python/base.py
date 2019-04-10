@@ -140,7 +140,12 @@ class HMMConf:
 
         v = np.dot(stateprob, self.confmat[obs])
         utils.assert_no_negatives('conformance', v)
-        utils.assert_bounded('conformance', v, 0, 1)
+
+        # handle floating point imprecision that can make conformance go over 1.
+        if v[0] > 1. and v[0] - 1. < 1e-10:
+            v[0] = 1.
+
+        utils.assert_bounded('conformance', v, 0., 1.)
         return v
 
     def emissionprob(self, obs, conf):
