@@ -511,6 +511,23 @@ class HMMConf:
                  'obs': np.zeros(self.emitmat.shape)}
         return stats
 
+    def __check_transcube(self):
+        for o in range(self.n_obs):
+            transmat = self.transcube_d[o,:,:]
+            utils.assert_shape('transmat_d', (self.n_states, self.n_states), transmat.shape)
+            sumframe = transmat.sum(axis=1)
+            almost_one = np.isclose(sumframe, np.ones(self.n_states))
+            error_rows = sumframe[np.invert(almost_one)]
+            errmsg = 'transmat_d{} does not sum to almost 1: {}'.format(o, error_rows)
+            assert almost_one.all(), errmsg
+
+    def __check_emitmat(self):
+        sumframe = self.emitmat_d.sum(axis=1)
+        almost_one = np.isclose(sumframe, np.ones(self.n_states))
+        error_rows = sumframe[np.invert(almost_one)]
+        errmsg = 'emitmat_d does not sum to 1 to almost 1: {}'.format(error_rows)
+        assert almost_one.all(), errmsg
+
     def _do_mstep(self, stats):
         """M step of EM 
 
