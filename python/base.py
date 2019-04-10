@@ -63,7 +63,7 @@ class ConvergenceMonitor:
 
         if len(self.history) > 0 and self.history[-1] > logprob:
             msg = 'Log probability is NOT non-decreasing from previous {:.2f} to current {:.2f}'
-            raise ValueError(msg.format(self.history[-1], logprob))
+            # raise ValueError(msg.format(self.history[-1], logprob))
 
         self.history.append(logprob)
         self.iter += 1
@@ -74,7 +74,7 @@ class ConvergenceMonitor:
         """
         converged_ = (self.iter == self.n_iter or 
                      (len(self.history) == 2 and
-                     self.history[1] - self.history[0] < self.tol))
+                     abs(self.history[1] - self.history[0]) < self.tol))
         return converged_
 
 
