@@ -551,29 +551,50 @@ class HMMConf:
             utils.normalize(self.startprob, axis=1)
 
         if 't' in self.params:
-            # Note:
-            # It is technically incorrect to add the previous transcube_d to the newly estimated parameter
-            # values. However, this is practically necessary since we create parameter estimation updates
-            # for all value even if they did not appear in the sample data used for the EM update since 
-            # we always loop over all parameter values for ease of implementation. 
-            # For example, if transcube_d[a,i,j] does not appear in the EM data, our learnt parameter estimation would 
-            # yield transcube_d[a,i,j] = 0 by default. With little sample data, this will mean that transcube_d will 
-            # not be a probability matrix. This in turn will mess up state estimation if conformance = 0, 
-            # because it will yield a zero vector. 
-            # To avoid the above scenario, from get go we add the initially uniform probability matrix so
-            # that the resulting transcube_d will remain a probability matrix if a row has all 0s in the parameter
-            # estimation. 
-            # In the contrary case where some value in row i transcube_d[a,i,j] has a non-zero parameter estimation,
-            # we will still get the same effect since we will normalize the row later anyway.
-            self.transcube_d = stats['trans'] + self.transcube_d
+            get0 = lambda a: a[0]
+            get1 = lambda a: a[1]
+            # to ensure that the resulting transcube still fulfill probability matrix requirement
+            row_sum = stats['trans'].sum(axis=2)
+            row_ind = np.argwhere(row_sum == 0.)
+            ind0 = np.apply_along_axis(get0, 1, row_ind)
+            ind1 = np.apply_along_axis(get1, 1, row_ind)
+            stats['trans'][ind0,ind1,:] = self.transcube_d[ind0,ind1,:]
+
+            col_sum = stats['trans'].sum(axis=1)
+            col_ind = np.argwhere(col_sum == 0.).ravel()
+            ind0 = np.apply_along_axis(get0, 1, row_ind)
+            ind2 = np.apply_along_axis(get1, 1, row_ind)
+            stats['trans'][ind0,:,ind2] += 1e-4 # 0.01% of observing state
+
+            # for o in range(self.n_obs):
+            #     row_sum = stats['trans'][o,:,:].sum(axis=1)
+            #     row_ind = np.argwhere(row_sum == 0.).ravel()
+            #     stats['trans'][o,row_ind,:] = self.transcube_d[o,row_ind,:]
+
+            #     # can overfit if EM samples does not contain some states so that the
+            #     # unobserved states has 0 over all states, i.e., never transitioned to
+            #     # Avoid this by adding an epsilon probability
+            #     col_sum = stats['trans'].sum(axis=0)
+            #     col_ind = np.argwhere(col_sum == 0.).ravel()
+            #     stats['trans'][o,:,col_ind] += 1e-4
+            self.transcube_d = stats['trans']
             utils.normalize(self.transcube_d, axis=2)   # normalize row
-            utils.assert_no_negatives('transcube_d', self.transcube_d)
 
         if 'o' in self.params:
             # See the above explanation
-            self.emitmat_d = stats['obs'] + self.emitmat_d
+            row_sum = stats['obs'].sum(axis=1)
+            row_ind = np.argwhere(row_sum == 0.).ravel()
+            stats['obs'][row_ind,:] = self.emitmat_d[row_ind,:]
+
+            # Can overfit if EM samples does not contain some observations so that the
+            # unobserved observation has 0 over all states, i.e., never observable
+            # Avoid this by adding an epsilon probability
+            col_sum = stats['obs'].sum(axis=0)
+            col_ind = np.argwhere(col_sum == 0.).ravel()
+            stats['obs'][:,col_ind] += 1e-4
+
+            self.emitmat_d = stats['obs'] # + self.emitmat_d
             utils.normalize(self.emitmat_d, axis=1)
-            utils.assert_no_negatives('emitmat_d', self.emitmat_d)
 
     def _compute_posteriors(self, fwdlattice, bwdlattice):
         """Posterior likelihood of states given data.
