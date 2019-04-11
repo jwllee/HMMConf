@@ -107,7 +107,7 @@ class HMMConf:
 
     def __init__(self, startprob, transcube, emitmat, confmat, distmat, 
                  int2state, int2obs, n_states, n_obs, params='to',
-                 n_iter=10, tol=1e-2, verbose=False, parallel=False, *args, **kwargs): 
+                 n_iter=10, tol=1e-2, verbose=False, parallel=True, *args, **kwargs): 
         utils.assert_shape('activities', transcube.shape[0], emitmat.shape[1])
         utils.assert_shape('states', transcube.shape[1], emitmat.shape[0])
         utils.assert_no_negatives('transcube', transcube)
