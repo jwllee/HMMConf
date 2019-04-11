@@ -123,6 +123,13 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
     return rg, inv_states
 
 
+def get_init_marking(rg):
+    # under assumption of workflow net
+    init = list(filter(lambda s: len(s.incoming) == 0, rg.states))
+    assert len(init) == 1, 'Violate workflow net assumption, init: {}'.format(init)
+    return init[0]
+
+
 def collapse_inv_trans(rg, inv_states):
     """Collapse transition edges in reachability graph that correspond to invisible transitions and modify the adjacent edge probability weight accordingly.
 
