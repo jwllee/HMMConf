@@ -91,7 +91,11 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
     while mark_queue and len(rg.states) < MAX_RG_STATE:
         cur_mark = mark_queue.pop()
         cur_state = mark_to_state[cur_mark]
-        enabled_trans = semantics.enabled_transitions(net, cur_mark)
+        enabled_trans = list(semantics.enabled_transitions(net, cur_mark))
+
+        # workout the transition arc weight
+        n_vis = len(list(map(lambda t: not is_inv(t), enabled_trans)))
+        weight = 1. / n_vis if n_vis > 0 else 0
 
         for t in enabled_trans:
             next_mark = semantics.execute(t, net, cur_mark)
@@ -103,8 +107,11 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
                 mark_to_state[next_mark] = next_state
                 mark_queue.append(next_mark)
 
-            data = {'weight': 1.}
-            rg_t = add_arc_from_to(repr(t), cur_state, next_state, rg, data)
+            # doesnt matter that invisible transitions also get weight since
+            # they will be removed ultimately as well
+            data = {'weight': weight}
+            t_label = t.label if t.name is not None else None
+            rg_t = add_arc_from_to(t_label, cur_state, next_state, rg, data)
 
             if is_inv(t):
                 inv_states.append((cur_state, rg_t, next_state))
