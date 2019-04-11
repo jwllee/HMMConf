@@ -462,10 +462,11 @@ class HMMConf:
             utils.assert_shape('denominator', (n_obs, n_states), denominator.shape)
 
             for o in range(self.n_obs):
+                denominator_o = denominator[o,:].ravel()[:,np.newaxis]
                 # only update values if sample affected the state-transition between i and j for o
-                to_update = denominator[o,:] != -np.inf
+                to_update = denominator_o != -np.inf
                 # log_xi_sum[o,:] = np.subtract(log_xi_sum[o,:], denominator[o,:], where=to_update)
-                np.subtract(log_xi_sum[o,:], denominator[o,:], out=log_xi_sum[o,:], where=to_update)
+                np.subtract(log_xi_sum[o,:,:], denominator_o, out=log_xi_sum[o,:,:], where=to_update)
 
             with np.errstate(under='ignore'):
                 stats['trans'] += np.exp(log_xi_sum)
