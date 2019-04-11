@@ -109,7 +109,7 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
 
             # doesnt matter that invisible transitions also get weight since
             # they will be removed ultimately as well
-            data = {'weight': weight}
+            data = {'weight': weight} 
             t_label = t.label if t.name is not None else None
             rg_t = add_arc_from_to(t_label, cur_state, next_state, rg, data)
 
@@ -128,6 +128,69 @@ def get_init_marking(rg):
     init = list(filter(lambda s: len(s.incoming) == 0, rg.states))
     assert len(init) == 1, 'Violate workflow net assumption, init: {}'.format(init)
     return init[0]
+
+
+def connect_inv_markings(rg, inv_states, is_inv):
+    init = get_init_marking(rg)
+    node_q = [init] 
+    visited = set()
+    visited.add(init)
+
+    def add_inv_states(state, inv_states, _buffer, visited, is_inv):
+        n_inv = 0
+        for t in state.outgoing:
+            if is_inv(t) and (state, t.to_state) not in visited:
+                n_inv += 1
+                inv_states.append(t.to_state)
+                _buffer.append(t.to_state)
+                visited.add((state, t.to_state))
+        return n_inv
+
+    while len(node_q) > 0:
+        cur_state = node_q.pop(0)
+
+        to_connect = list()
+        for t in cur_state.outgoing:
+            if t.to_state not in visited:
+                visited.add(t.to_state)
+                node_q.append(t.to_state)
+
+            # no need to process an invisible transition
+            if is_inv(t):
+                continue
+
+            n_inv = 0
+            to_connect_t = list()
+            visited_t = set()
+            _buffer = list()
+
+            n_inv += add_inv_states(t.to_state, to_connect_t, 
+                                    _buffer, visited_t, is_inv)
+
+            while len(_buffer) > 0:
+                # keep add adjacent nodes 
+                s = _buffer.pop(0)
+                n_inv += add_inv_states(s, to_connect_t, _buffer, 
+                                        visited_t, is_inv)
+
+            if n_inv > 0:
+                # diminish t's weight to connect to next states
+                w = t.data['weight'] / n_inv
+                t.data['weight'] = w
+                for state in to_connect_t:
+                    data = {'weight': w}
+                    to_connect.append((t.name, cur_state, state, rg, data))
+        
+        for name, from_state, to_state, rg, data in to_connect:
+            add_arc_from_to(name, from_state, to_state, rg, data)
+
+    # removal of invisible transition
+    for in_state, inv_tran, out_state in inv_states:
+        if in_state.name == init.name:
+            continue
+        in_state.outgoing.remove(inv_tran)
+        out_state.incoming.remove(inv_tran)
+        rg.transitions.remove(inv_tran)
 
 
 def collapse_inv_trans(rg, inv_states):
