@@ -240,11 +240,16 @@ class HMMConf:
         obsprob = self.emissionprob(obs, emitconf)[np.newaxis,:]
         logobsprob = utils.log_mask_zero(obsprob)
 
-        msg2 = 'Likelihood of observation at states time t: {}'.format(obsprob)
+        msg2 = 'Likelihood of observation at states time t: \n{}'.format(obsprob)
         msg3 = 'Conformance between state and observation at time t ' \
               'before observation adjustment: {:.2f}'.format(emitconf[0])
         self.logger.debug(msg2)
         self.logger.debug(msg3)
+
+        self.logger.debug('Current forward est: \n{}'.format(cur_fwd_est))
+
+        utils.assert_shape('logobsprob', (1, self.n_states), logobsprob.shape)
+        utils.assert_shape('cur_fwd_est', (1, self.n_states), cur_fwd_est.shape)
 
         logfwd = logobsprob + cur_fwd_est
         fwd = logfwd.copy()
