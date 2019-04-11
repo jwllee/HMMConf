@@ -122,7 +122,7 @@ def compute_conformance_mat(emitmat):
     return (emitmat > 0).astype(np.int).T
 
 
-def compute_startprob(rg, state2int, n_states):
+def compute_startprob(rg, state2int, n_states, is_inv):
     """Computes the initial state estimation which is a one-hot vector with point mass at the 
     initial marking state.
 
@@ -130,15 +130,27 @@ def compute_startprob(rg, state2int, n_states):
     :param state2int dict: mapping from state name to integer
     :param n_states int: number of states
     """
-    # initial marking is the only state without incoming
-    init = list(filter(lambda s: len(s.incoming) == 0, rg.states))
+    # init = list(filter(lambda s: len(s.incoming) == 0, rg.states))
+    init = pm_extra.get_init_marking(rg)
 
-    if len(init) != 1:
-        raise ValueError('Number of states with 0 incoming transitions: {}'.format(len(init)))
+    # if len(init) != 1:
+    #     raise ValueError('Number of states with 0 incoming transitions: {}'.format(len(init)))
 
-    ind = state2int[init[0].name]
+    init_inds = [state2int[init.name]]
+    init_marks = [init.name]
+
+    for t in init.outgoing:
+        if is_inv(t):
+            init_inds.append(state2int[t.to_state.name])
+            init_marks.append(t.to_state.name)
+
+    weight = 1. / len(init_inds)
+    
     startprob = np.zeros((1, n_states))
-    startprob[0, ind] = 1.
+    for ind in init_inds:
+        startprob[0, ind] = weight
+
+    logger.info('Initial states: {}'.format(init_marks))
 
     return startprob
 
