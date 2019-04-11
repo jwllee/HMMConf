@@ -296,7 +296,6 @@ class HMMConf:
 
         return self
 
-
     def __check_transcube(self):
         for o in range(self.n_obs):
             transmat = self.transcube_d[o,:,:]
@@ -380,17 +379,6 @@ class HMMConf:
 
             self.emitmat_d = stats['obs'] # + self.emitmat_d
             utils.normalize(self.emitmat_d, axis=1)
-
-    def _compute_posteriors(self, fwdlattice, bwdlattice):
-        """Posterior likelihood of states given data.
-
-        :param fwdlattice array_like: log forward probability 
-        :param bwdlattice array_like: log backward probability
-        """
-        log_gamma = fwdlattice + bwdlattice
-        utils.log_normalize(log_gamma, axis=1)  # this prevents underflow
-        with np.errstate(under='ignore'):
-            return np.exp(log_gamma)
 
     def compute_distance_from_initstate(self, initstate, logfwd):
         work_buffer = logfwd.copy()
