@@ -490,6 +490,7 @@ class HMMConf:
         if 'o' in self.params:
             n_samples = logobsprob.shape[0]
 
+            xi_sum = np.zeros((self.n_states, self.n_obs))
             i = 0
             for t, symbol in enumerate(np.concatenate(X)):
                 # skip if it's perfectly conforming
@@ -497,19 +498,23 @@ class HMMConf:
                     continue
 
                 self.logger.debug('No. of non-zeros: {}'.format(np.count_nonzero(posteriors[t])))
-                stats['obs'][:, symbol] += posteriors[t]
+                # stats['obs'][:, symbol] += posteriors[t]
+                xi_sum[:,symbol] += posteriors[t]
                 i += 1
 
             self.logger.debug('There were {} non-conforming events'.format(i))
 
-            denominator = stats['obs'].sum(axis=1)[:, np.newaxis]
+            # denominator = stats['obs'].sum(axis=1)[:, np.newaxis]
+            denominator = xi_sum.sum(axis=1)[:,np.newaxis]
             # avoid zero division by replacement as 1.
             # denominator[denominator == 0.] = 1.
             # stats['obs'] /= denominator
 
             # only update matrix if the sample affected the emission probability
             to_update = denominator != 0.
-            np.divide(stats['obs'], denominator, out=stats['obs'], where=to_update)
+            # np.divide(stats['obs'], denominator, out=stats['obs'], where=to_update)
+            np.divide(xi_sum, denominator, out=xi_sum, where=to_update)
+            stats['obs'] += xi_sum
 
     def _initialize_sufficient_statistics(self):
         """Initialize sufficient statistics.
