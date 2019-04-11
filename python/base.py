@@ -252,12 +252,23 @@ class HMMConf:
         utils.assert_shape('cur_fwd_est', (1, self.n_states), cur_fwd_est.shape)
 
         logfwd = logobsprob + cur_fwd_est
-        fwd = logfwd.copy()
-        utils.exp_log_normalize(fwd, axis=1)
+
+        # check if it's a valid logfwd
+        if logsumexp(logfwd, axis=1)[0] == -np.inf:
+            msg = 'forward probability yielded 0! uniform probability over ' \
+                'all state to maintain validity. \nlogobsprob: \n{} ' \
+                '\ntransitioned prev_logfwd: \n{}'.format(logobsprob, cur_fwd_est)
+            warnings.warn(msg, category=UserWarning)
+            logfwd[0,:] = np.log(1. / self.n_states)
+
+        stateprob = logfwd.copy()
+        utils.exp_log_normalize(stateprob, axis=1)
+
+        self.logger.debug('logfwd: \n{}'.format(logfwd))
 
         conf_arr[self.FIRST_IND] = stateconf[0]
         conf_arr[self.SECOND_IND] = emitconf[0]
-        conf_arr[self.UPDATED_IND] = self.conform(fwd, obs)
+        conf_arr[self.UPDATED_IND] = self.conform(stateprob, obs)
 
         return logfwd, conf_arr, logstateprob, logobsprob
 
