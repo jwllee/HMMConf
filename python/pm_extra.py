@@ -136,7 +136,9 @@ def collapse_inv_trans(rg, inv_states):
     :param rg: reachability graph
     :param inv_states array_like: ordered list of tuples (in_state, inv_tran, out_state) such that earlier elements are ones were explored first during the breadth-first search that created the reachability graph.
     """
-    for in_state, inv_tran, out_state in inv_states[::-1]:
+    for _, inv_tran, _ in inv_states[::-1]:
+        in_state = inv_tran.from_state
+        out_state = inv_tran.to_state
         # print('In state: {}'.format(in_state))
         # print('Transition: {}'.format(inv_tran))
         # print('Out state: {}'.format(out_state))
@@ -156,6 +158,10 @@ def collapse_inv_trans(rg, inv_states):
             for out_tran in out_state.outgoing:
                 rg.transitions.remove(out_tran)
                 out_tran.to_state.incoming.remove(out_tran)
+
+        # remove in_state if it no longer has any outgoing arcs
+        if len(in_state.outgoing) == 0 and len(in_state.incoming) == 0:
+            rg.states.remove(in_state)
 
         rg.transitions.remove(inv_tran)
 
