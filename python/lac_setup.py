@@ -84,7 +84,7 @@ def compute_state_trans_cube(rg, state2int, obs2int, n_obs, n_states):
             obs_ind = obs2int[tran.name]
             out_state_ind = state2int[tran.to_state.name]
 
-            cube[obs_ind, in_state_ind, out_state_ind] += 1
+            cube[obs_ind, in_state_ind, out_state_ind] += tran.data['weight']
 
     utils.normalize(cube, axis=2)
     return cube
@@ -106,7 +106,7 @@ def compute_emission_mat(rg, state2int, obs2int, n_obs, n_states):
 
         for tran in in_state.outgoing:
             obs_ind = obs2int[tran.name]
-            emitmat[in_state_ind, obs_ind] += 1.
+            emitmat[in_state_ind, obs_ind] += tran.data['weight']
 
     utils.normalize(emitmat, axis=1)
     return emitmat
