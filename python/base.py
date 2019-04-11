@@ -237,7 +237,7 @@ class HMMConf:
         self.logger.debug(msg1)
 
         emitconf = self.conform(cur_stateprob, obs)
-        obsprob = self.emissionprob(obs, emitconf)
+        obsprob = self.emissionprob(obs, emitconf)[np.newaxis,:]
         logobsprob = utils.log_mask_zero(obsprob)
 
         msg2 = 'Likelihood of observation at states time t: {}'.format(obsprob)
