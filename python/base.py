@@ -491,7 +491,7 @@ class HMMConf:
             n_samples = logobsprob.shape[0]
 
             xi_sum = np.zeros((self.n_states, self.n_obs))
-            i = 0
+            n_deviations = 0
             for t, symbol in enumerate(np.concatenate(X)):
                 # skip if it's perfectly conforming
                 if conflattice[t, self.UPDATED_IND] >= 1.:
@@ -500,9 +500,12 @@ class HMMConf:
                 self.logger.debug('No. of non-zeros: {}'.format(np.count_nonzero(posteriors[t])))
                 # stats['obs'][:, symbol] += posteriors[t]
                 xi_sum[:,symbol] += posteriors[t]
-                i += 1
+                n_deviations += 1
 
-            self.logger.debug('There were {} non-conforming events'.format(i))
+            self.logger.debug('There were {} non-conforming events'.format(n_deviations))
+
+            if n_deviations == 0:
+                return
 
             # denominator = stats['obs'].sum(axis=1)[:, np.newaxis]
             denominator = xi_sum.sum(axis=1)[:,np.newaxis]
