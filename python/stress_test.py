@@ -91,7 +91,7 @@ def setup_hmm(rg):
 
     hmm = base.HMMConf(startprob, transcube, emitmat, confmat, distmat, 
                        int2state, int2obs, n_states, n_obs, 
-                       params='to', verbose=True)
+                       params='to', verbose=True, n_jobs=7)
     return hmm
 
 
