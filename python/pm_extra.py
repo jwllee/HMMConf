@@ -82,6 +82,7 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
     inv_states = list()
 
     init_state = ts.TransitionSystem.State(staterep(repr(init_marking)))
+    init_state.data['disc'] = 0
     rg.states.add(init_state)
 
     # mapping visited states to marking
@@ -103,6 +104,8 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
 
             if next_state is None:
                 next_state = ts.TransitionSystem.State(staterep(repr(next_mark)))
+                # discovered one step away from parent node
+                next_state.data['disc'] = cur_state.data['disc'] + 1
                 rg.states.add(next_state)
                 mark_to_state[next_mark] = next_state
                 mark_queue.append(next_mark)
