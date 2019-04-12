@@ -3,6 +3,7 @@ import pandas as pd
 import time, os
 
 import base, lac_setup, pm_extra, tracker, utils
+import conform as conform_mod
 from pm4py.objects.petri.importer import pnml as pnml_importer
 from pm4py.visualization.transition_system import util
 
@@ -121,8 +122,9 @@ def setup_hmm(rg):
     transcube = lac_setup.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
     emitmat = lac_setup.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
     confmat = lac_setup.compute_conformance_mat(emitmat)
+    conform_f = conform_mod.conform
 
-    hmm = base.HMMConf(startprob, transcube, emitmat, confmat, distmat, 
+    hmm = base.HMMConf(conform_f, startprob, transcube, emitmat, confmat, distmat, 
                        int2state, int2obs, n_states, n_obs, 
                        params='to', verbose=True, n_jobs=7)
     return hmm
@@ -139,7 +141,7 @@ def event_df_to_hmm_format(df):
 
 
 if __name__ == '__main__':
-    net_id = 'id_26'
+    net_id = 'id_8'
     net_fname = choose_net_by_id(net_id)
     log_fname = choose_log_by_noise(net_fname, '0.5', '0.5')
     print('Start correlation test on \n net: {}, log: {}...'.format(net_fname, log_fname))

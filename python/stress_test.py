@@ -4,6 +4,7 @@ import time, os
 
 import base, lac_setup, pm_extra, tracker, utils
 from pm4py.objects.petri.importer import pnml as pnml_importer
+import conform as conform_mod
 
 
 MODEL_FP = os.path.join('..', 'data', 'BPM2018', 'stress-test', 'model.pnml')
@@ -88,8 +89,9 @@ def setup_hmm(rg):
     # utils.normalize(startprob, axis=1)
     # startprob = np.zeros((1, n_states)) + 1. / n_states
     # utils.assert_bounded('startprob', np.sum(startprob).ravel()[0], 0., 1.)
+    conform_f = conform_mod.conform
 
-    hmm = base.HMMConf(startprob, transcube, emitmat, confmat, distmat, 
+    hmm = base.HMMConf(conform_f, startprob, transcube, emitmat, confmat, distmat, 
                        int2state, int2obs, n_states, n_obs, 
                        params='to', verbose=True, n_jobs=7)
     return hmm
