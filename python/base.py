@@ -100,6 +100,7 @@ class HMMConf:
     :param n_iter int, optional: Maximum number of iterations to perform in EM parameter estimation
     :param tol float, optional: The convergence threshold. EM will stop once the gain between iterations is below this value.
     :param verbose bool: When ``True`` per-iteration convergence reports are printed to :data:`sys.stderr`. 
+    :param n_jobs int: the number of jobs to run in parallel for EM fitting. None means 1 and -1 means use all processors.
     """
     FIRST_IND = 0
     SECOND_IND = 1
@@ -107,7 +108,7 @@ class HMMConf:
 
     def __init__(self, startprob, transcube, emitmat, confmat, distmat, 
                  int2state, int2obs, n_states, n_obs, params='to',
-                 n_iter=10, tol=1e-2, verbose=False, parallel=True, *args, **kwargs): 
+                 n_iter=10, tol=1e-2, verbose=False, n_jobs=None, *args, **kwargs): 
         utils.assert_shape('activities', transcube.shape[0], emitmat.shape[1])
         utils.assert_shape('states', transcube.shape[1], emitmat.shape[0])
         utils.assert_no_negatives('transcube', transcube)
@@ -130,7 +131,7 @@ class HMMConf:
         self.tol = tol
         self.verbose = verbose
         self.monitor = ConvergenceMonitor(self.tol, self.n_iter, self.verbose)
-        self.parallel = parallel
+        self.n_jobs = n_jobs
 
     def forward(self, obs, prev_obs=None, prev_fwd=None):
         """Computes the log forward probability.
@@ -183,6 +184,9 @@ class HMMConf:
     def __partition_X(self, X, lengths, n):
         # do not partition if it's less than 2n
         if lengths.shape[0] < 2 * n:
+            msg = 'Using 1 processor rather than {} since there is only {} sequences'
+            msg = msg.format(self.n_jobs, lengths.shape[0])
+            self.logger.info(msg)
             return [X,], [lengths,]
 
         # workout the args
@@ -208,7 +212,7 @@ class HMMConf:
 
     def __fit_mp(self, X, lengths):
         # parallelize per case
-        n_proc = mp.cpu_count() - 1
+        n_proc = self.n_jobs if self.n_jobs is not None else 1
         X_parts, lengths_parts = self.__partition_X(X, lengths, n_proc)
         n_proc = len(X_parts)
 
@@ -270,7 +274,7 @@ class HMMConf:
                                                       self.transcube.shape,
                                                       self.emitmat.shape)
 
-            if not self.parallel:
+            if self.n_jobs is None or self.n_jobs == 1:
                 results = self.__fit(X, lengths)
             else:
                 results = self.__fit_mp(X, lengths)
