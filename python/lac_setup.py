@@ -23,8 +23,10 @@ def rg_to_nx_undirected(rg, map_nodes=False):
     node_map = None
 
     if map_nodes:
+        # sort states by discovery time then by their name to break ties
+        sorted_states = sorted(list(rg.states), key=lambda s: (s.data['disc'], s.name))
         # map state name to node
-        node_map = {key:val for val, key in enumerate(map(lambda state: state.name, rg.states))}
+        node_map = {key:val for val, key in enumerate(map(lambda state: state.name, sorted_states))}
         # print(node_map)
         mapped_edges = map(lambda e: (node_map[e.from_state.name], node_map[e.to_state.name]), rg.transitions)
         G.add_edges_from(mapped_edges)
