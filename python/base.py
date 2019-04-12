@@ -88,6 +88,7 @@ class HMMConf:
     modified so that the next state depends on both the last state and last observation. 
 
     **Parameters**:
+    :param conform_f function: conformance function
     :param startprob array_like: vector of initial state distribution
     :param transcube array_like: cube denoting state-transition probability extracted from the reachability graph of net model
     :param emitmat array_like: emission probability matrix extracted from the reachability graph of net model
@@ -106,15 +107,16 @@ class HMMConf:
     SECOND_IND = 1
     UPDATED_IND = 2
 
-    def __init__(self, startprob, transcube, emitmat, confmat, distmat, 
-                 int2state, int2obs, n_states, n_obs, params='to',
-                 n_iter=10, tol=1e-2, verbose=False, n_jobs=None, *args, **kwargs): 
+    def __init__(self, conform_f, startprob, transcube, emitmat, confmat, distmat, 
+                 int2state, int2obs, n_states, n_obs, params='to', n_iter=10, 
+                 tol=1e-2, verbose=False, n_jobs=None, *args, **kwargs): 
         utils.assert_shape('activities', transcube.shape[0], emitmat.shape[1])
         utils.assert_shape('states', transcube.shape[1], emitmat.shape[0])
         utils.assert_no_negatives('transcube', transcube)
         utils.assert_no_negatives('emitmat', emitmat)
 
         self.logger = utils.make_logger(self.__class__.__name__)
+        self.conform_f = conform_f
         self.params = params
         self.startprob = startprob
         self.transcube = transcube
@@ -143,8 +145,8 @@ class HMMConf:
         """
         # logfwd, conf_arr, _, _ = self._forward(obs, prev_obs, prev_fwd)
         logfwd, conf_arr, _, _ = _forward(self.n_states, self.transcube, self.transcube_d, 
-                                          self.emitmat, self.emitmat_d, self.confmat, obs, 
-                                          prev_obs, prev_fwd, self.startprob)
+                                          self.emitmat, self.emitmat_d, self.confmat, 
+                                          self.conform_f, obs, prev_obs, prev_fwd, self.startprob)
         return logfwd, conf_arr
 
     def _do_forward_pass(self, x):
@@ -155,8 +157,9 @@ class HMMConf:
         :type x: array_like (n_samples, 1)
         :return: log likelihood, the forward lattice, the conformance lattice, state-transition and observation lattice
         """
+        conform_f = self.conform_f
         _do_forward_pass(x, self.n_states, self.transcube, self.transcube_d, self.emitmat,
-                         self.emitmat_d, self.confmat, self.startprob)
+                         self.emitmat_d, self.confmat, self.startprob, conform_f)
 
     def do_forward_pass(self, X):
         """Computes the forward lattice containing the forward probability of a single sequence of
@@ -186,7 +189,7 @@ class HMMConf:
         if lengths.shape[0] < 2 * n:
             msg = 'Using 1 processor rather than {} since there is only {} sequences'
             msg = msg.format(self.n_jobs, lengths.shape[0])
-            self.logger.info(msg)
+            self.logger.debug(msg)
             return [X,], [lengths,]
 
         # workout the args
@@ -217,6 +220,7 @@ class HMMConf:
         n_proc = len(X_parts)
 
         args_list = [{
+            'conform_f': self.conform_f,
             'params': self.params,
             'n_obs': self.n_obs,
             'n_states': self.n_states,
@@ -235,7 +239,7 @@ class HMMConf:
             logprob, stats = _fit_worker(args_list[0])
             results = [(logprob, stats)]
         else:
-            self.logger.info('Parallel fit using {} processes'.format(n_proc))
+            self.logger.debug('Parallel fit using {} processes'.format(n_proc))
             pool = mp.Pool(processes=n_proc)
             results = pool.map(_fit_worker, args_list)
 
@@ -243,6 +247,7 @@ class HMMConf:
 
     def __fit(self, X, lengths):
         args = {
+            'conform_f': self.conform_f,
             'params': self.params,
             'n_obs': self.n_obs,
             'n_states': self.n_states,
@@ -425,7 +430,7 @@ class HMMConf:
         utils.normalize(prev_stateprob, axis=1) # to avoid not summing to 1 after exp
 
         # w_{i,j}(x_t)
-        stateconf = _conform(prev_stateprob, prev_obs, self.confmat, self.n_states)
+        stateconf = self.conform_f(prev_stateprob, prev_obs, self.confmat, self.n_states)
         stateprob = _stateprob(prev_obs, stateconf, self.transcube, self.transcube_d)
         logstateprob = utils.log_mask_zero(stateprob)
 
@@ -436,7 +441,7 @@ class HMMConf:
         # P(Z_t | X_{1:t} = x_{1:t}), i.e. normalized forward probability at time t
         cur_stateprob = cur_fwd_est.copy()
         utils.exp_log_normalize(cur_stateprob, axis=1)
-        emitconf = _conform(cur_stateprob, obs, self.confmat, self.n_states)
+        emitconf = self.conform_f(cur_stateprob, obs, self.confmat, self.n_states)
         obsprob = _emissionprob(obs, emitconf, self.emitmat, self.emitmat_d)
         logobsprob = utils.log_mask_zero(obsprob)[np.newaxis,:]
         prev_logfwd = prev_logfwd.ravel()[:,np.newaxis]
@@ -454,28 +459,6 @@ class HMMConf:
 
 
 """Functions for parallelize EM fitting"""
-def _conform(stateprob, obs, confmat, n_states):
-    """Computes the conformance of an observation with respect to a state estimation.
-
-    :param stateprob array_like: state estimation vector that sums to 1.
-    :param obs int: observation
-    """
-    utils.assert_shape('stateprob', (1, n_states), stateprob.shape)
-
-    if not np.isclose(stateprob.sum(), [1.]):
-        raise ValueError('State estimation: {} does not sum to 1.'.format(stateprob))
-
-    v = np.dot(stateprob, confmat[obs])
-    utils.assert_no_negatives('conformance', v)
-
-    # handle floating point imprecision that can make conformance go over 1.
-    if v[0] > 1. and v[0] - 1. < 1e-10:
-        v[0] = 1.
-
-    utils.assert_bounded('conformance', v, 0., 1.)
-    return v
-
-
 def _emissionprob(obs, conf, emitmat, emitmat_d):
     """
     Computes P(x is obs at time t | z at time t) where x is the observation variable
@@ -506,7 +489,7 @@ def _stateprob(obs, conf, transcube, transcube_d):
 
 
 def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat, 
-             obs, prev_obs=None, prev_fwd=None, startprob=None):
+             conform_f, obs, prev_obs=None, prev_fwd=None, startprob=None):
     """Computes the log forward probability.
 
     :param obs int: observation
@@ -518,7 +501,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
 
     if prev_fwd is None:
         logger.debug('startprob: {}'.format(startprob))
-        emitconf = _conform(startprob, obs, confmat, n_states)
+        emitconf = conform_f(startprob, obs, confmat, n_states)
         obsprob = _emissionprob(obs, emitconf, emitmat, emitmat_d)
 
         # n_nonzeros = np.count_nonzero(obsprob)
@@ -533,7 +516,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
         fwd = logfwd.copy()
         utils.exp_log_normalize(fwd, axis=1)
         conf_arr[HMMConf.SECOND_IND] = emitconf[0]
-        conf_arr[HMMConf.UPDATED_IND] = _conform(fwd, obs, confmat, n_states)
+        conf_arr[HMMConf.UPDATED_IND] = conform_f(fwd, obs, confmat, n_states)
         logstateprob = np.full((n_states, n_states), -np.inf) # zero everything
         return logfwd, conf_arr, logstateprob, logobsprob
 
@@ -541,7 +524,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     prev_stateprob = prev_fwd.copy()
     utils.exp_log_normalize(prev_stateprob, axis=1)
 
-    stateconf = _conform(prev_stateprob, prev_obs, confmat, n_states)
+    stateconf = conform_f(prev_stateprob, prev_obs, confmat, n_states)
     stateprob = _stateprob(prev_obs, stateconf, transcube, transcube_d)
     logstateprob = utils.log_mask_zero(stateprob)
 
@@ -567,7 +550,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     logger.debug(msg0)
     logger.debug(msg1)
 
-    emitconf = _conform(cur_stateprob, obs, confmat, n_states)
+    emitconf = conform_f(cur_stateprob, obs, confmat, n_states)
     obsprob = _emissionprob(obs, emitconf, emitmat, emitmat_d)[np.newaxis,:]
     logobsprob = utils.log_mask_zero(obsprob)
 
@@ -599,7 +582,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
 
     conf_arr[HMMConf.FIRST_IND] = stateconf[0]
     conf_arr[HMMConf.SECOND_IND] = emitconf[0]
-    conf_arr[HMMConf.UPDATED_IND] = _conform(stateprob, obs, confmat, n_states)
+    conf_arr[HMMConf.UPDATED_IND] = conform_f(stateprob, obs, confmat, n_states)
 
     return logfwd, conf_arr, logstateprob, logobsprob
 
@@ -617,7 +600,8 @@ def forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     return logfwd, conf_arr
 
 
-def _do_forward_pass(x, n_states, transcube, transcube_d, emitmat, emitmat_d, confmat, startprob):
+def _do_forward_pass(x, n_states, transcube, transcube_d, 
+                     emitmat, emitmat_d, confmat, startprob, conform_f):
     """computes the forward lattice containing the forward probability of a single sequence of
     observations.
 
@@ -637,7 +621,7 @@ def _do_forward_pass(x, n_states, transcube, transcube_d, emitmat, emitmat_d, co
     obs = x[0,0]
     start = time.time()
     fwd, conf, _, logobsprob = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
-                                        obs, startprob=startprob)
+                                        conform_f, obs, startprob=startprob)
     end = time.time()
     times.append(end - start)
     fwdlattice[0] = fwd
@@ -651,7 +635,7 @@ def _do_forward_pass(x, n_states, transcube, transcube_d, emitmat, emitmat_d, co
         obs = x[i,0]
         start = time.time()
         fwd, conf, logstateprob, logobsprob = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d,
-                                                       confmat, obs, prev_obs, prev_fwd)
+                                                       confmat, conform_f, obs, prev_obs, prev_fwd)
         end = time.time()
         times.append(end - start)
         fwdlattice[i] = fwd
@@ -837,6 +821,7 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
 
 
 def _fit_worker(args):
+    conform_f = args['conform_f']
     params = args['params']
     n_obs = args['n_obs']
     n_states = args['n_states']
@@ -856,7 +841,7 @@ def _fit_worker(args):
 
     for i, j in utils.iter_from_X_lengths(X, lengths):
         fwd_results = _do_forward_pass(X[i:j], n_states, transcube, transcube_d,
-                                        emitmat, emitmat_d, confmat, startprob)
+                                        emitmat, emitmat_d, confmat, startprob, conform_f)
         logprob = fwd_results[0]
         fwdlattice = fwd_results[1]
         conflattice = fwd_results[2]
