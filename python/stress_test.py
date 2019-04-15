@@ -1,10 +1,13 @@
 import numpy as np
 import pandas as pd
-import time, os
+import time, os, sys
 
 import base, lac_setup, pm_extra, tracker, utils
 from pm4py.objects.petri.importer import pnml as pnml_importer
 import conform as conform_mod
+
+from itertools import chain
+from collections import deque
 
 
 MODEL_FP = os.path.join('..', 'data', 'BPM2018', 'stress-test', 'model.pnml')
@@ -98,13 +101,64 @@ def setup_hmm(rg):
 
 
 def make_conformance_tracker(hmm):
-    return tracker.ConformanceTracker(hmm)
+    return tracker.ConformanceTracker(hmm, max_n_case=100)
 
 
 def event_df_to_hmm_format(df):
     lengths = df.groupby(CASEID).count()[ACTIVITY_ID].values
     X = df[[ACTIVITY_ID]].values
     return X, lengths
+
+
+def sizeof_hmm(hmm):
+    assert isinstance(hmm, base.HMMConf)
+    size_obj = sys.getsizeof(hmm)
+    _bytes = 0
+    _bytes += hmm.startprob.nbytes
+    _bytes += hmm.transcube.nbytes
+    _bytes += hmm.transcube_d.nbytes
+    _bytes += hmm.emitmat.nbytes
+    _bytes += hmm.emitmat_d.nbytes
+    _bytes += hmm.confmat.nbytes
+    _bytes += hmm.distmat.nbytes
+    # print('numpy array size: {}MB'.format(_bytes))
+    size_obj += _bytes
+
+    size_int2obs = 0
+    for key, val in hmm.int2obs.items():
+        size_int2obs += sys.getsizeof(key)
+        size_int2obs += sys.getsizeof(val)
+
+    size_int2state = 0
+    for key, val in hmm.int2state.items():
+        size_int2state += sys.getsizeof(key)
+        size_int2state += sys.getsizeof(val)
+
+    size_obj += size_int2obs
+    size_obj += size_int2state
+
+    # print('int2obs size: {}MB'.format(size_int2obs))
+    # print('int2state size: {}MB'.format(size_int2state))
+
+    return size_obj
+
+# Follows https://docs.python.org/3/library/sys.html
+def sizeof_tracker(t):
+    assert isinstance(t, tracker.ConformanceTracker)
+    size_obj = sys.getsizeof(t) 
+    # avoid double counting
+    size_obj -= sys.getsizeof(t.hmm) 
+    size_obj += sizeof_hmm(t.hmm)
+    for caseid in t.caseid_history:
+        size_obj += sys.getsizeof(caseid)
+    for key, item in t.items():
+        size_obj += sys.getsizeof(key)
+        size_obj += sys.getsizeof(item)
+    return size_obj
+
+
+def sizeof_tracker_mb(t):
+    return sizeof_tracker(t) / 1e6
 
 
 if __name__ == '__main__':
@@ -129,70 +183,103 @@ if __name__ == '__main__':
     hmm = setup_hmm(rg)
 
     print('Make conformance tracker...')
-    tracker = make_conformance_tracker(hmm)
+    _tracker = make_conformance_tracker(hmm)
 
     caseids = data_df[CASEID].unique()[-100:]
     to_include = data_df[CASEID].isin(caseids)
-    caseids = ['case_34'] # warm start example
+    # caseids = ['case_34'] # warm start example
     # caseids = data_df[CASEID].unique()[:100]
-    n_cases = len(caseids)
-    em_to_include = data_df[CASEID].isin(caseids)
+    # n_cases = len(caseids)
+    # em_to_include = data_df[CASEID].isin(caseids)
 
-    filtered_df = data_df.loc[to_include,:]
-    em_filtered_df = data_df.loc[em_to_include,:]
+    filtered_df = data_df
+    # em_filtered_df = data_df.loc[em_to_include,:]
 
     print('data df shape: {}'.format(filtered_df.shape))
 
     # EM training
-    print('EMing...')
-    X, lengths = event_df_to_hmm_format(em_filtered_df)
-    fit_start = time.time()
-    tracker.hmm.fit(X, lengths)
-    fit_end = time.time()
-    fit_took = fit_end - fit_start
-    logger.info('Training {} cases took: {:.2f}s'.format(n_cases, fit_took))
+    # print('EMing...')
+    # X, lengths = event_df_to_hmm_format(em_filtered_df)
+    # fit_start = time.time()
+    # tracker.hmm.fit(X, lengths)
+    # fit_end = time.time()
+    # fit_took = fit_end - fit_start
+    # logger.info('Training {} cases took: {:.2f}s'.format(n_cases, fit_took))
 
-    # f = open('./results-stress-test.csv', 'w')
-    # header = 'caseid,event,conformance,inc_dist,completeness,most_likely_state,state_likelihood'
-    # print(header, file=f)
+    time_cols = [
+        'event', 'total time', 
+        'Average processing time per event',
+        'local avg time'
+    ]
 
-    i = 0
-    limit = 1000
-    for row in em_filtered_df.itertuples(index=False):
+    mem_cols = [
+        'event', 'Total space used (MB)'
+    ]
+
+    print('Tracker size: {:.0f}MB'.format(sizeof_tracker_mb(_tracker)))
+
+    mem_lines = list()
+    mem_lines.append((0, int(sizeof_tracker_mb(_tracker))))
+
+    total_events = 0
+    
+    # memory test
+    print('Doing memory test...')
+    for row in filtered_df.itertuples(index=False):
         caseid = row.caseid
         event = row.activity_id
         act = row.activity
 
-        score = tracker.replay_event(caseid, event)
-        conf_arr = score[0]
-        most_likely_state = score[1]
-        likelihood_mode = score[2]
-        complete = score[3]
-        exp_inc_dist = score[4]
-        mode_dist = score[5]
-        sum_dist = score[6]
-        sum_mode_dist = score[7]
+        # start_i = time.time()
+        score = _tracker.replay_event(caseid, event)
+        # end_i = time.time()
+        # print('Took {:.3f}s'.format(end_i - start_i))
 
-        msg = '{caseid} replay {event:<11}:    ' \
-            'conf: {conf:.2f}, compl: {compl:.2f}, ' \
-            'inc_dist: {inc_dist:.2f}, mode_dist: {mode_dist:.2f}, ' \
-            'sum_dist: {sum_dist:.2f}, sum_mode_dist: {sum_mode_dist:.2f}, ' \
-            '{state}, {like:.2f}'
-        msg = msg.format(caseid=caseid, event=act, conf=conf_arr[2],
-                         compl=complete, inc_dist=exp_inc_dist,
-                         mode_dist=mode_dist, sum_dist=sum_dist,
-                         sum_mode_dist=sum_mode_dist, 
-                         state=most_likely_state, like=likelihood_mode)
-        print(msg)
-        # print(caseid, act, conf[2], exp_inc_dist, complete, state, mode, file=f, sep=',')
+        total_events += 1
 
-        # time.sleep(0.1)
+        if total_events % 10000 == 0:
+            print('Total events: {}'.format(total_events))
+            # start_i = time.time()
+            line_i = (total_events, int(sizeof_tracker_mb(_tracker)))
+            # end_i = time.time()
+            # print('took {:.2f}s to count mem'.format(end_i - start_i))
+            mem_lines.append(line_i)
 
-        # i += 1
-        # if i > limit:
-        #     break
+    # time test
+    time_lines = list()
+    time_lines.append((0, '', '', ''))
+    total_events = 0
+    total_time = 0
+    local_avg = 0
 
-    # f.close()
+    print('Doing time test...')
+    for row in filtered_df.itertuples(index=False):
+        caseid = row.caseid
+        event = row.activity_id
+        act = row.activity
+
+        start_i = time.time()
+        score = _tracker.replay_event(caseid, event)
+        end_i = time.time()
+
+        total_time += ((end_i - start_i) * 1000)
+        local_avg += ((end_i - start_i) * 1000)
+        total_events += 1
+
+        if total_events % 10000 == 0:
+            print('Total events: {}'.format(total_events))
+            avg_time = total_time / total_events
+            local_avg = local_avg / 10000
+            line_i = (total_events, total_time, avg_time, local_avg)
+            time_lines.append(line_i)
+            local_avg = 0
+
+    mem_df = pd.DataFrame.from_records(mem_lines, columns=mem_cols)
+    time_df = pd.DataFrame.from_records(time_lines, columns=time_cols)
+
+    out_fp = 'results-stress-test.csv'
+    df = pd.merge(time_df, mem_df, on='event')
+    df.to_csv(out_fp, index=None)
 
     end = time.time()
     took = end - start
