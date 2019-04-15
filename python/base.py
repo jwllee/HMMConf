@@ -187,9 +187,9 @@ class HMMConf:
     def __partition_X(self, X, lengths, n):
         # do not partition if it's less than 2n
         if lengths.shape[0] < 2 * n:
-            msg = 'Using 1 processor rather than {} since there is only {} sequences'
-            msg = msg.format(self.n_jobs, lengths.shape[0])
-            self.logger.debug(msg)
+            # msg = 'Using 1 processor rather than {} since there is only {} sequences'
+            # msg = msg.format(self.n_jobs, lengths.shape[0])
+            # self.logger.debug(msg)
             return [X,], [lengths,]
 
         # workout the args
@@ -208,8 +208,8 @@ class HMMConf:
         X_parts = np.split(X, split_inds)
         lengths_parts = np.array_split(lengths, n)
 
-        utils.assert_shape('X_parts', (n,), (len(X_parts),))
-        utils.assert_shape('lengths_parts', (n,), (len(lengths_parts),))
+        # utils.assert_shape('X_parts', (n,), (len(X_parts),))
+        # utils.assert_shape('lengths_parts', (n,), (len(lengths_parts),))
 
         return X_parts, lengths_parts
 
@@ -239,7 +239,7 @@ class HMMConf:
             logprob, stats = _fit_worker(args_list[0])
             results = [(logprob, stats)]
         else:
-            self.logger.debug('Parallel fit using {} processes'.format(n_proc))
+            # self.logger.debug('Parallel fit using {} processes'.format(n_proc))
             pool = mp.Pool(processes=n_proc)
             results = pool.map(_fit_worker, args_list)
 
@@ -296,11 +296,11 @@ class HMMConf:
 
             self.monitor.report(cur_logprob)
             if self.monitor.converged:
-                msg = 'Converged at iteration {} with current logprob {:.2f} and previous logprob {:.2f}'
-                cur_logprob = self.monitor.history[1] if len(self.monitor.history) > 1 else self.monitor.history[0]
-                prev_logprob = self.monitor.history[1] if len(self.monitor.history) > 1 else -1
-                msg = msg.format(it, cur_logprob, prev_logprob)
-                self.logger.debug(msg)
+                # msg = 'Converged at iteration {} with current logprob {:.2f} and previous logprob {:.2f}'
+                # cur_logprob = self.monitor.history[1] if len(self.monitor.history) > 1 else self.monitor.history[0]
+                # prev_logprob = self.monitor.history[1] if len(self.monitor.history) > 1 else -1
+                # msg = msg.format(it, cur_logprob, prev_logprob)
+                # self.logger.debug(msg)
                 break
 
         return self
@@ -397,7 +397,7 @@ class HMMConf:
         utils.normalize(work_buffer, axis=1)
 
         outer = np.outer(initstate, work_buffer)
-        utils.assert_bounded('outer', outer, 0, 1)
+        # utils.assert_bounded('outer', outer, 0, 1)
         work_buffer = np.multiply(self.distmat, outer)
         dist = np.sum(work_buffer, axis=None)
         return dist
@@ -446,9 +446,9 @@ class HMMConf:
         logobsprob = utils.log_mask_zero(obsprob)[np.newaxis,:]
         prev_logfwd = prev_logfwd.ravel()[:,np.newaxis]
 
-        utils.assert_shape('logobsprob', (1, self.n_states), logobsprob.shape)
-        utils.assert_shape('logstateprob', (self.n_states, self.n_states), logstateprob.shape)
-        utils.assert_shape('prev_logfwd', (self.n_states, 1), prev_logfwd.shape)
+        # utils.assert_shape('logobsprob', (1, self.n_states), logobsprob.shape)
+        # utils.assert_shape('logstateprob', (self.n_states, self.n_states), logstateprob.shape)
+        # utils.assert_shape('prev_logfwd', (self.n_states, 1), prev_logfwd.shape)
 
         work_buffer = logobsprob + logstateprob + prev_logfwd - logsumexp(logfwd, axis=1)
         work_buffer = utils.log_mask_zero(self.distmat) + work_buffer
@@ -467,8 +467,8 @@ def _emissionprob(obs, conf, emitmat, emitmat_d):
     :param obs int: observation at time t
     :param conf float: conformance between stateprob and obs
     """
-    logger.debug('conform: {}'.format(conf))
-    logger.debug('emitmat_d: \n{}'.format(emitmat_d[:,obs]))
+    # logger.debug('conform: {}'.format(conf))
+    # logger.debug('emitmat_d: \n{}'.format(emitmat_d[:,obs]))
     prob = conf * emitmat[:,obs] + (1 - conf) * emitmat_d[:,obs]
     return prob
 
@@ -500,7 +500,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     conf_arr = np.full(3, -1.)
 
     if prev_fwd is None:
-        logger.debug('startprob: {}'.format(startprob))
+        # logger.debug('startprob: {}'.format(startprob))
         emitconf = conform_f(startprob, obs, confmat, n_states)
         obsprob = _emissionprob(obs, emitconf, emitmat, emitmat_d)
 
@@ -530,9 +530,9 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
 
     # n_nonzeros = np.count_nonzero(stateprob)
     # logger.debug('No. non-zero vals: {}'.format(n_nonzeros))
-    logger.debug('Previous fwd: \n{}'.format(prev_fwd))
-    logger.debug('state prob: \n{}'.format(stateprob))
-    logger.debug('log state prob: \n{}'.format(logstateprob))
+    # logger.debug('Previous fwd: \n{}'.format(prev_fwd))
+    # logger.debug('state prob: \n{}'.format(stateprob))
+    # logger.debug('log state prob: \n{}'.format(logstateprob))
 
     work_buffer = logstateprob.T + prev_fwd
     # logger.debug('No. nan vals: {}'.format(np.count_nonzero(np.isnan(work_buffer))))
@@ -543,27 +543,27 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     cur_stateprob = cur_fwd_est.copy()
     utils.exp_log_normalize(cur_stateprob, axis=1)
 
-    msg0 = '   Log state estimate of time t before observation at time t: \n{}'
-    msg1 = 'W. State estimate of time t before observation at time t: \n{}'
-    msg0 = msg0.format(cur_fwd_est)
-    msg1 = msg1.format(cur_stateprob)
-    logger.debug(msg0)
-    logger.debug(msg1)
+    # msg0 = '   Log state estimate of time t before observation at time t: \n{}'
+    # msg1 = 'W. State estimate of time t before observation at time t: \n{}'
+    # msg0 = msg0.format(cur_fwd_est)
+    # msg1 = msg1.format(cur_stateprob)
+    # logger.debug(msg0)
+    # logger.debug(msg1)
 
     emitconf = conform_f(cur_stateprob, obs, confmat, n_states)
     obsprob = _emissionprob(obs, emitconf, emitmat, emitmat_d)[np.newaxis,:]
     logobsprob = utils.log_mask_zero(obsprob)
 
-    msg2 = 'Likelihood of observation at states time t: \n{}'.format(obsprob)
-    msg3 = 'Conformance between state and observation at time t ' \
-            'before observation adjustment: {:.2f}'.format(emitconf[0])
-    logger.debug(msg2)
-    logger.debug(msg3)
+    # msg2 = 'Likelihood of observation at states time t: \n{}'.format(obsprob)
+    # msg3 = 'Conformance between state and observation at time t ' \
+    #         'before observation adjustment: {:.2f}'.format(emitconf[0])
+    # logger.debug(msg2)
+    # logger.debug(msg3)
 
-    logger.debug('Current forward est: \n{}'.format(cur_fwd_est))
+    # logger.debug('Current forward est: \n{}'.format(cur_fwd_est))
 
-    utils.assert_shape('logobsprob', (1, n_states), logobsprob.shape)
-    utils.assert_shape('cur_fwd_est', (1, n_states), cur_fwd_est.shape)
+    # utils.assert_shape('logobsprob', (1, n_states), logobsprob.shape)
+    # utils.assert_shape('cur_fwd_est', (1, n_states), cur_fwd_est.shape)
 
     logfwd = logobsprob + cur_fwd_est
 
@@ -578,13 +578,14 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     stateprob = logfwd.copy()
     utils.exp_log_normalize(stateprob, axis=1)
 
-    logger.debug('logfwd: \n{}'.format(logfwd))
+    # logger.debug('logfwd: \n{}'.format(logfwd))
 
     conf_arr[HMMConf.FIRST_IND] = stateconf[0]
     conf_arr[HMMConf.SECOND_IND] = emitconf[0]
     conf_arr[HMMConf.UPDATED_IND] = conform_f(stateprob, obs, confmat, n_states)
 
     return logfwd, conf_arr, logstateprob, logobsprob
+
 
 def forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
             obs, prev_obs=None, prev_fwd=None, startprob=None):
@@ -674,7 +675,7 @@ def backward(emitmat, emitmat_d, transcube, transcube_d, obs, prev_obs, conf_arr
     else:
         logbwd = logsumexp(logemitprob + logstateprob + prev_bwd, axis=1)
 
-    logger.debug('Backward probability: \n{}'.format(logbwd))
+    # logger.debug('Backward probability: \n{}'.format(logbwd))
 
     return logbwd
 
@@ -756,8 +757,8 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
         if n_samples <= 1:
             return
 
-        utils.assert_shape('logstateprob', (n_samples, n_states, n_states), logstateprob.shape)
-        utils.assert_shape('logobsprob', (n_samples, n_states), logobsprob.shape)
+        # utils.assert_shape('logstateprob', (n_samples, n_states, n_states), logstateprob.shape)
+        # utils.assert_shape('logobsprob', (n_samples, n_states), logobsprob.shape)
 
         log_xi_sum = np.full((n_obs, n_states, n_states), -np.inf)
 
@@ -775,7 +776,7 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
 
         denominator = logsumexp(log_xi_sum, axis=2)
 
-        utils.assert_shape('denominator', (n_obs, n_states), denominator.shape)
+        # utils.assert_shape('denominator', (n_obs, n_states), denominator.shape)
 
         for o in range(n_obs):
             denominator_o = denominator[o,:].ravel()[:,np.newaxis]
@@ -797,12 +798,12 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
             if conflattice[t, HMMConf.UPDATED_IND] >= 1.:
                 continue
 
-            logger.debug('No. of non-zeros: {}'.format(np.count_nonzero(posteriors[t])))
+            # logger.debug('No. of non-zeros: {}'.format(np.count_nonzero(posteriors[t])))
             # stats['obs'][:, symbol] += posteriors[t]
             xi_sum[:,symbol] += posteriors[t]
             n_deviations += 1
 
-        logger.debug('There were {} non-conforming events'.format(n_deviations))
+        # logger.debug('There were {} non-conforming events'.format(n_deviations))
 
         if n_deviations == 0:
             return
