@@ -1,5 +1,10 @@
 import numpy as np
-import utils
+from . import utils
+
+
+__all__ = [
+    'conform'
+]
 
 
 def conform(stateprob, obs, confmat, n_states):

@@ -3,8 +3,15 @@ from sklearn.base import _pprint
 from scipy.misc import logsumexp
 import numpy as np
 import pandas as pd
-import utils, warnings, sys, time, string
+import warnings, sys, time, string
+from . import utils
 import multiprocessing as mp
+
+
+__all__ = [
+    'ConvergenceMonitor',
+    'HMMConf'
+]
 
 
 np.set_printoptions(precision=16)
