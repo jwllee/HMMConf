@@ -38,6 +38,8 @@ class ConformanceStatus:
         self.inc_dist_history = deque(maxlen=max_history)
         self.mode_dist_history = deque(maxlen=max_history)
         self.state_est_history = deque(maxlen=max_history)
+        self.exp_completeness_history = deque(maxlen=max_history)
+        self.mode_completeness_history = deque(maxlen=max_history)
         self.sum_dist = 0.
         self.sum_mode_dist = 0.
         self.n_events = 0
@@ -57,6 +59,17 @@ class ConformanceStatus:
         """Most recent activity related to the case.
         """
         return self.activity_history[-1] if len(self.activity_history) > 0 else None
+
+    @property
+    def exp_completeness(self):
+        return self.exp_completeness_history[-1] 
+
+    @property
+    def mode_completeness(self):
+        return self.mode_completeness_history[-1]
+
+    def __compute_completeness(self, n_events, n_injections):
+        return 1 - (n_injections / (n_injections + n_events))
 
     def update(self, act, logfwd, conf_arr, complete, inc_dist, mode_inc_dist):
         """Updates the conformance status of the case.
@@ -82,6 +95,10 @@ class ConformanceStatus:
         self.mode_dist_history.append(mode_inc_dist)
         self.sum_dist += max(0, inc_dist - 1)
         self.sum_mode_dist += max(0, mode_inc_dist - 1)
+        exp_complete = self.__compute_completeness(self.n_events, self.sum_dist)
+        mode_complete = self.__compute_completeness(self.n_events, self.sum_mode_dist)
+        self.exp_completeness_history.append(exp_complete)
+        self.mode_completeness_history.append(mode_complete)
 
 
 class ConformanceTracker(dict):
@@ -102,7 +119,7 @@ class ConformanceTracker(dict):
         self.caseid_history = deque(maxlen=max_n_case)
         self.logger = utils.make_logger(self.__class__.__name__)
 
-    def __compute_completeness(self, n_events, logfwd):
+    def __compute_completeness_from_init(self, n_events, logfwd):
         initstate = self.hmm.startprob
         dist_from_initstate = self.hmm.compute_distance_from_initstate(initstate, logfwd)
         complete = (n_events + 1) / (dist_from_initstate + 1)
@@ -141,7 +158,7 @@ class ConformanceTracker(dict):
         exp_inc_dist = self.hmm.compute_expected_inc_distance(event, logfwd,
                                                               prev_obs, prev_logfwd)
         mode_dist = self.__compute_mode_dist(logfwd, prev_logfwd)
-        complete = self.__compute_completeness(status.n_events, logfwd)
+        complete = self.__compute_completeness_from_init(status.n_events, logfwd)
 
         status.update(event, logfwd, conf_arr, complete, exp_inc_dist, mode_dist)
         self.caseid_history.appendleft(caseid)
@@ -149,5 +166,6 @@ class ConformanceTracker(dict):
         score = (conf_arr, status.most_likely_state,
                  status.likelihood_mode, complete, 
                  exp_inc_dist, mode_dist, 
-                 status.sum_dist, status.sum_mode_dist)
+                 status.sum_dist, status.sum_mode_dist,
+                 status.exp_completeness, status.mode_completeness)
         return score
