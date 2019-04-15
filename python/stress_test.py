@@ -2,9 +2,8 @@ import numpy as np
 import pandas as pd
 import time, os, sys
 
-import base, lac_setup, pm_extra, tracker, utils
+import hmmconf
 from pm4py.objects.petri.importer import pnml as pnml_importer
-import conform as conform_mod
 
 from itertools import chain
 from collections import deque
@@ -21,7 +20,7 @@ CASEID = 'caseid'
 np.set_printoptions(precision=2)
 
 
-logger = utils.make_logger(__file__)
+logger = hmmconf.utils.make_logger(__file__)
 
 
 def import_data():
@@ -50,21 +49,21 @@ def process_net(net, init_marking, final_marking):
     is_inv = lambda t: t.label is None
     inv_trans = list(filter(is_inv, net.transitions))
     # print('Number of invisible transitions: {}'.format(len(inv_trans)))
-    rg, inv_states = pm_extra.build_reachability_graph(net, init_marking, is_inv)
+    rg, inv_states = hmmconf.build_reachability_graph(net, init_marking, is_inv)
     is_inv = lambda t: t.name is None
-    pm_extra.connect_inv_markings(rg, inv_states, is_inv)
+    hmmconf.connect_inv_markings(rg, inv_states, is_inv)
     return rg
 
 
 def setup_hmm(rg):
-    G, node_map = lac_setup.rg_to_nx_undirected(rg, map_nodes=True)
+    G, node_map = hmmconf.rg_to_nx_undirected(rg, map_nodes=True)
     n_states = len(node_map)
 
     is_inv = lambda t: t.name is None
-    startprob = lac_setup.compute_startprob(rg, node_map, n_states, is_inv)
+    startprob = hmmconf.compute_startprob(rg, node_map, n_states, is_inv)
 
     # remove invisible transitions connected to initial marking
-    init_mark = pm_extra.get_init_marking(rg)
+    init_mark = hmmconf.get_init_marking(rg)
     to_remove = list()
     for t in init_mark.outgoing:
         if is_inv(t):
@@ -74,7 +73,7 @@ def setup_hmm(rg):
         t.from_state.outgoing.remove(t)
         t.to_state.incoming.remove(t)
 
-    dist_df = lac_setup.compute_distance_matrix(G, node_map, as_dataframe=True)
+    dist_df = hmmconf.compute_distance_matrix(G, node_map, as_dataframe=True)
     distmat = dist_df.values
     # print('Distance df: \n{}'.format(dist_df))
 
@@ -85,23 +84,23 @@ def setup_hmm(rg):
 
     logger.info('No. of states: {}'.format(n_states))
 
-    transcube = lac_setup.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
-    emitmat = lac_setup.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
-    confmat = lac_setup.compute_conformance_mat(emitmat)
+    transcube = hmmconf.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
+    emitmat = hmmconf.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
+    confmat = hmmconf.compute_conformance_mat(emitmat)
     # startprob += 1e-1
     # utils.normalize(startprob, axis=1)
     # startprob = np.zeros((1, n_states)) + 1. / n_states
     # utils.assert_bounded('startprob', np.sum(startprob).ravel()[0], 0., 1.)
-    conform_f = conform_mod.conform
+    conform_f = hmmconf.conform
 
-    hmm = base.HMMConf(conform_f, startprob, transcube, emitmat, confmat, distmat, 
+    hmm = hmmconf.HMMConf(conform_f, startprob, transcube, emitmat, confmat, distmat, 
                        int2state, int2obs, n_states, n_obs, 
                        params='to', verbose=True, n_jobs=7)
     return hmm
 
 
 def make_conformance_tracker(hmm):
-    return tracker.ConformanceTracker(hmm, max_n_case=100)
+    return hmmconf.ConformanceTracker(hmm, max_n_case=100)
 
 
 def event_df_to_hmm_format(df):
@@ -111,7 +110,7 @@ def event_df_to_hmm_format(df):
 
 
 def sizeof_hmm(hmm):
-    assert isinstance(hmm, base.HMMConf)
+    assert isinstance(hmm, hmmconf.HMMConf)
     size_obj = sys.getsizeof(hmm)
     _bytes = 0
     _bytes += hmm.startprob.nbytes
@@ -144,7 +143,7 @@ def sizeof_hmm(hmm):
 
 # Follows https://docs.python.org/3/library/sys.html
 def sizeof_tracker(t):
-    assert isinstance(t, tracker.ConformanceTracker)
+    assert isinstance(t, hmmconf.ConformanceTracker)
     size_obj = sys.getsizeof(t) 
     # avoid double counting
     size_obj -= sys.getsizeof(t.hmm) 

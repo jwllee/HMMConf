@@ -14,6 +14,14 @@ from pm4py.objects.petri import semantics
 from pm4py.objects.petri import petrinet as petri
 
 
+__all__ = [
+    'build_reachability_graph',
+    'get_init_marking',
+    'connect_inv_markings',
+    'collapse_inv_trans'
+]
+
+
 MAX_RG_STATE = 1e6
 
 
