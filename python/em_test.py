@@ -141,7 +141,7 @@ def event_df_to_hmm_format(df):
 
 
 if __name__ == '__main__':
-    net_id = 'id_8'
+    net_id = 'id_50'
     net_fname = choose_net_by_id(net_id)
     log_fname = choose_log_by_noise(net_fname, '0.5', '0.5')
     print('Start correlation test on \n net: {}, log: {}...'.format(net_fname, log_fname))
@@ -207,16 +207,21 @@ if __name__ == '__main__':
         mode_dist = score[5]
         sum_dist = score[6]
         sum_mode_dist = score[7]
+        exp_complete = score[8]
+        mode_complete = score[9]
 
         msg = '{caseid} replay {event:<11}:    ' \
             'conf: {conf:.2f}, compl: {compl:.2f}, ' \
             'inc_dist: {inc_dist:.2f}, mode_dist: {mode_dist:.2f}, ' \
             'sum_dist: {sum_dist:.2f}, sum_mode_dist: {sum_mode_dist:.2f}, ' \
+            'exp_compl: {exp_compl:.2f}, mode_compl: {mode_compl:.2f}, ' \
             '{state}, {like:.2f}'
         msg = msg.format(caseid=caseid, event=act, conf=conf_arr[2],
                          compl=complete, inc_dist=exp_inc_dist,
                          mode_dist=mode_dist, sum_dist=sum_dist,
                          sum_mode_dist=sum_mode_dist, 
+                         exp_compl=exp_complete, 
+                         mode_compl=mode_complete,
                          state=most_likely_state, like=likelihood_mode)
         print(msg)
         # print(caseid, act, conf[2], exp_inc_dist, complete, state, mode, file=f, sep=',')
