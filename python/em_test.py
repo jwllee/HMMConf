@@ -2,8 +2,7 @@ import numpy as np
 import pandas as pd
 import time, os
 
-import base, lac_setup, pm_extra, tracker, utils
-import conform as conform_mod
+import hmmconf
 from pm4py.objects.petri.importer import pnml as pnml_importer
 from pm4py.visualization.transition_system import util
 
@@ -11,7 +10,7 @@ from pm4py.visualization.transition_system import util
 np.set_printoptions(precision=2)
 
 
-logger = utils.make_logger(__file__)
+logger = hmmconf.utils.make_logger(__file__)
 
 
 MODEL_DIR = os.path.join('..', 'data', 'BPM2018', 'correlation-tests', 'models')
@@ -29,11 +28,6 @@ def choose_net_by_id(idstr):
         if fname.endswith(suffix):
             matches.append(fname)
     assert len(matches) == 1, 'Matches: {}'.format(matches)
-    # check if reduced version exists
-    reduced_fname = matches[0].replace('.pnml', '_reduced.pnml')
-    reduced_fp = os.path.join(MODEL_DIR, 'reduced', reduced_fname)
-    if os.path.isfile(reduced_fp):
-        matches[0] = reduced_fname
     return matches[0]
 
 
@@ -49,9 +43,7 @@ def choose_log_by_noise(netname, trace_noise_perc, event_noise_perc):
 
 
 def import_data(net_fname, log_fname):
-    net_fp = os.path.join(MODEL_DIR, net_fname)
-    if 'reduced' in net_fname:
-        net_fp = os.path.join(MODEL_DIR, 'reduced', net_fname)
+    net_fp = os.path.join(MODEL_DIR, 'reduced', net_fname)
     log_fp = os.path.join(LOG_DIR, log_fname)
 
     data_df = pd.read_csv(log_fp)
@@ -77,10 +69,10 @@ def process_net(net, init_marking, final_marking):
     is_inv = lambda t: t.label is None
     inv_trans = list(filter(is_inv, net.transitions))
     print('Number of invisible transitions: {}'.format(len(inv_trans)))
-    rg, inv_states = pm_extra.build_reachability_graph(net, init_marking, is_inv)
-    # pm_extra.collapse_inv_trans(rg, inv_states)
+    rg, inv_states = hmmconf.build_reachability_graph(net, init_marking, is_inv)
+    # hmmconf.collapse_inv_trans(rg, inv_states)
     is_inv = lambda t: t.name is None
-    pm_extra.connect_inv_markings(rg, inv_states, is_inv)
+    hmmconf.connect_inv_markings(rg, inv_states, is_inv)
 
     # out_fp = './rg_id_26.dot'
     # dot_rg = util.visualize_graphviz.visualize(rg)
@@ -90,15 +82,15 @@ def process_net(net, init_marking, final_marking):
 
 
 def setup_hmm(rg):
-    G, node_map = lac_setup.rg_to_nx_undirected(rg, map_nodes=True)
+    G, node_map = hmmconf.rg_to_nx_undirected(rg, map_nodes=True)
     n_states = len(node_map)
 
     # deal with initial marking and get start probability
     is_inv = lambda t: t.name is None
-    startprob = lac_setup.compute_startprob(rg, node_map, n_states, is_inv)
+    startprob = hmmconf.compute_startprob(rg, node_map, n_states, is_inv)
 
     # remove invisible transitions connected to initial marking
-    init_mark = pm_extra.get_init_marking(rg)
+    init_mark = hmmconf.get_init_marking(rg)
     to_remove = list()
     for t in init_mark.outgoing:
         if is_inv(t):
@@ -108,7 +100,7 @@ def setup_hmm(rg):
         t.from_state.outgoing.remove(t)
         t.to_state.incoming.remove(t)
 
-    dist_df = lac_setup.compute_distance_matrix(G, node_map, as_dataframe=True)
+    dist_df = hmmconf.compute_distance_matrix(G, node_map, as_dataframe=True)
     distmat = dist_df.values
     # print('Distance df: \n{}'.format(dist_df))
 
@@ -119,19 +111,19 @@ def setup_hmm(rg):
 
     logger.info('No. of states: {}'.format(n_states))
 
-    transcube = lac_setup.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
-    emitmat = lac_setup.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
-    confmat = lac_setup.compute_conformance_mat(emitmat)
-    conform_f = conform_mod.conform
+    transcube = hmmconf.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
+    emitmat = hmmconf.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
+    confmat = hmmconf.compute_conformance_mat(emitmat)
+    conform_f = hmmconf.conform
 
-    hmm = base.HMMConf(conform_f, startprob, transcube, emitmat, confmat, distmat, 
+    hmm = hmmconf.HMMConf(conform_f, startprob, transcube, emitmat, confmat, distmat, 
                        int2state, int2obs, n_states, n_obs, 
                        params='to', verbose=True, n_jobs=7)
     return hmm
 
 
 def make_conformance_tracker(hmm):
-    return tracker.ConformanceTracker(hmm)
+    return hmmconf.ConformanceTracker(hmm)
 
 
 def event_df_to_hmm_format(df):
@@ -141,7 +133,7 @@ def event_df_to_hmm_format(df):
 
 
 if __name__ == '__main__':
-    net_id = 'id_50'
+    net_id = 'id_8'
     net_fname = choose_net_by_id(net_id)
     log_fname = choose_log_by_noise(net_fname, '0.5', '0.5')
     print('Start correlation test on \n net: {}, log: {}...'.format(net_fname, log_fname))
