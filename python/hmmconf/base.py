@@ -116,7 +116,7 @@ class HMMConf:
 
     def __init__(self, conform_f, startprob, transcube, emitmat, confmat, distmat, 
                  int2state, int2obs, n_states, n_obs, params='to', n_iter=10, 
-                 tol=1e-2, verbose=False, n_jobs=None, *args, **kwargs): 
+                 tol=1e-2, verbose=False, n_jobs=None, random_seed=123, *args, **kwargs):
         utils.assert_shape('activities', transcube.shape[0], emitmat.shape[1])
         utils.assert_shape('states', transcube.shape[1], emitmat.shape[0])
         utils.assert_no_negatives('transcube', transcube)
@@ -125,6 +125,7 @@ class HMMConf:
         self.logger = utils.make_logger(self.__class__.__name__)
         self.conform_f = conform_f
         self.params = params
+        self.random_seed = random_seed
         self.startprob = startprob
         self.transcube = transcube
         self.transcube_d = np.zeros(transcube.shape) + 1. / self.transcube.shape[1]
