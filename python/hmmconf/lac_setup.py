@@ -148,13 +148,26 @@ def compute_startprob(rg, state2int, n_states, is_inv):
     # if len(init) != 1:
     #     raise ValueError('Number of states with 0 incoming transitions: {}'.format(len(init)))
 
-    init_inds = [state2int[init.name]]
-    init_marks = [init.name]
+    init_inds = set()
+    init_marks = set()
+    init_inds.add(state2int[init.name])
+    init_marks.add(init.name)
+
+    _buffer = set()
 
     for t in init.outgoing:
         if is_inv(t):
-            init_inds.append(state2int[t.to_state.name])
-            init_marks.append(t.to_state.name)
+            init_inds.add(state2int[t.to_state.name])
+            init_marks.add(t.to_state.name)
+            _buffer.add(t.to_state)
+
+    while len(_buffer) > 0:
+        state = _buffer.pop()
+        for t in state.outgoing:
+            if is_inv(t):
+                init_inds.add(state2int[t.to_state.name])
+                init_marks.add(t.to_state.name)
+                _buffer.add(t.to_state)
 
     weight = 1. / len(init_inds)
     
