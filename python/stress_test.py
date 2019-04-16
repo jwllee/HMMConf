@@ -62,12 +62,12 @@ def setup_hmm(rg):
     is_inv = lambda t: t.name is None
     startprob = hmmconf.compute_startprob(rg, node_map, n_states, is_inv)
 
-    # remove invisible transitions connected to initial marking
-    init_mark = hmmconf.get_init_marking(rg)
+    # remove invisible transitions 
     to_remove = list()
-    for t in init_mark.outgoing:
+    for t in rg.transitions:
         if is_inv(t):
             to_remove.append(t)
+
     for t in to_remove:
         rg.transitions.remove(t)
         t.from_state.outgoing.remove(t)
