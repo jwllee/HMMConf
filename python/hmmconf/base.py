@@ -361,11 +361,11 @@ class HMMConf:
             ind1 = np.apply_along_axis(get1, 1, row_ind)
             stats['trans'][ind0,ind1,:] = self.transcube_d[ind0,ind1,:]
 
-            col_sum = stats['trans'].sum(axis=1)
-            col_ind = np.argwhere(col_sum == 0.).ravel()
-            ind0 = np.apply_along_axis(get0, 1, row_ind)
-            ind2 = np.apply_along_axis(get1, 1, row_ind)
-            stats['trans'][ind0,:,ind2] += 1e-4 # 0.01% of observing state
+            # col_sum = stats['trans'].sum(axis=1)
+            # col_ind = np.argwhere(col_sum == 0.).ravel()
+            # ind0 = np.apply_along_axis(get0, 1, row_ind)
+            # ind2 = np.apply_along_axis(get1, 1, row_ind)
+            # stats['trans'][ind0,:,ind2] += 1e-4 # 0.01% of observing state
 
             # for o in range(self.n_obs):
             #     row_sum = stats['trans'][o,:,:].sum(axis=1)
@@ -378,7 +378,7 @@ class HMMConf:
             #     col_sum = stats['trans'].sum(axis=0)
             #     col_ind = np.argwhere(col_sum == 0.).ravel()
             #     stats['trans'][o,:,col_ind] += 1e-4
-            self.transcube_d = stats['trans'] 
+            self.transcube_d = stats['trans'] # + self.transcube_d
             utils.normalize(self.transcube_d, axis=2)   # normalize row
 
         if 'o' in self.params:
@@ -390,9 +390,9 @@ class HMMConf:
             # Can overfit if EM samples does not contain some observations so that the 
             # unobserved observation has 0 over all states, i.e., never observable
             # Avoid this by adding an epsilon probability
-            col_sum = stats['obs'].sum(axis=0)
-            col_ind = np.argwhere(col_sum == 0.).ravel()
-            stats['obs'][:,col_ind] += 1e-4
+            # col_sum = stats['obs'].sum(axis=0)
+            # col_ind = np.argwhere(col_sum == 0.).ravel()
+            # stats['obs'][:,col_ind] += 1e-4
 
             self.emitmat_d = stats['obs'] # + self.emitmat_d
             utils.normalize(self.emitmat_d, axis=1)
