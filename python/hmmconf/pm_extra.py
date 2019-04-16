@@ -199,6 +199,14 @@ def connect_inv_markings(rg, inv_states, is_inv):
     for in_state, inv_tran, out_state in inv_states:
         if in_state.name == init.name:
             continue
+        # check if the out_state only has invisible transition edges
+        n_vis = 0
+        for in_tran in out_state.incoming:
+            if not is_inv(in_tran):
+                n_vis += 1
+        if n_vis == 0:
+            continue
+
         in_state.outgoing.remove(inv_tran)
         out_state.incoming.remove(inv_tran)
         rg.transitions.remove(inv_tran)
