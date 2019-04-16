@@ -380,8 +380,11 @@ class HMMConf:
             #     stats['trans'][o,:,col_ind] += 1e-4
             self.transcube_d = stats['trans'] # + self.transcube_d
             utils.normalize(self.transcube_d, axis=2)   # normalize row
+            # self.__check_transcube(self.transcube_d)
 
         if 'o' in self.params:
+            # if np.isnan(stats['obs']).any():
+            #    raise ValueError('stats[obs] has nan: \n{}'.format(stats['obs']))
             # See the above explanation
             row_sum = stats['obs'].sum(axis=1)
             row_ind = np.argwhere(row_sum == 0.).ravel()
@@ -396,6 +399,7 @@ class HMMConf:
 
             self.emitmat_d = stats['obs'] # + self.emitmat_d
             utils.normalize(self.emitmat_d, axis=1)
+            # self.__check_emitmat(self.emitmat_d)
 
     def compute_distance_from_initstate(self, initstate, logfwd):
         work_buffer = logfwd.copy()
@@ -836,6 +840,10 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
         to_update = denominator != 0.
         # np.divide(stats['obs'], denominator, out=stats['obs'], where=to_update)
         np.divide(xi_sum, denominator, out=xi_sum, where=to_update)
+
+        # if np.isnan(xi_sum).any():
+        #     raise ValueError('xi_sum has nan: \n{}'.format(xi_sum))
+
         stats['obs'] += xi_sum
 
 
