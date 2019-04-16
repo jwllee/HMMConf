@@ -116,7 +116,7 @@ class HMMConf:
 
     def __init__(self, conform_f, startprob, transcube, emitmat, confmat, distmat, 
                  int2state, int2obs, n_states, n_obs, params='to', n_iter=10, 
-                 tol=1e-2, verbose=False, n_jobs=None, random_seed=123, *args, **kwargs):
+                 tol=1e-2, verbose=False, n_jobs=None, random_seed=123, *args, **kwargs): 
         utils.assert_shape('activities', transcube.shape[0], emitmat.shape[1])
         utils.assert_shape('states', transcube.shape[1], emitmat.shape[0])
         utils.assert_no_negatives('transcube', transcube)
@@ -521,6 +521,16 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
         # utils.assert_shape('logobsprob', (1, n_states), logobsprob.shape)
         # utils.assert_shape('startprob', (1, n_states), logstartprob.shape)
         logfwd = logstartprob + logobsprob
+
+        # check if it's a valid logfwd
+        if logsumexp(logfwd, axis=1)[0] == -np.inf:
+            msg = 'forward probability yielded 0 on replaying {}! ' \
+                'uniform probability over all state to maintain validity. \n' \
+                'logobsprob: \n{} \nstartprob: \n{}'
+            msg = msg.format(obs, logobsprob, logstartprob)
+            warnings.warn(msg, category=UserWarning)
+            logfwd[0,:] = np.log(1. / n_states)
+        
         fwd = logfwd.copy()
         utils.exp_log_normalize(fwd, axis=1)
         conf_arr[HMMConf.SECOND_IND] = emitconf[0]
