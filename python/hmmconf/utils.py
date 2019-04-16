@@ -108,10 +108,13 @@ def log_normalize(a, axis=None):
     :param axis: dimension along which normalization is to be performed
     """
     with np.errstate(under="ignore"):
-        a_lse = logsumexp(a, axis)
+        a_lse = logsumexp(a, axis)[:,np.newaxis]
         # print('a: {}'.format(a))
         # print('logsumexp: {}'.format(a_lse))
-    a -= a_lse[:, np.newaxis]
+    # a -= a_lse[:, np.newaxis]
+    # avoid zero division
+    to_update = a_lse != -np.inf
+    np.subtract(a, a_lse, out=a, where=to_update)
 
     # check it's actually normalized
     # summed = logsumexp(a, axis=axis)
