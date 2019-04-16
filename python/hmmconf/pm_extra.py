@@ -25,7 +25,7 @@ __all__ = [
 MAX_RG_STATE = 1e6
 
 
-plt.switch_backend('TkAgg')
+# plt.switch_backend('TkAgg')
 # print('matplotlib using backend: {}'.format(plt.get_backend()))
 
 
