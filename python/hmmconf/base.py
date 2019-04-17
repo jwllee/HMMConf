@@ -1,6 +1,6 @@
 from collections import deque
 from sklearn.base import _pprint
-from scipy.misc import logsumexp
+from scipy.special import logsumexp
 import numpy as np
 import pandas as pd
 import warnings, sys, time, string
