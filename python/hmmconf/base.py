@@ -250,6 +250,7 @@ class HMMConf:
             # self.logger.debug('Parallel fit using {} processes'.format(n_proc))
             pool = mp.Pool(processes=n_proc)
             results = pool.map(_fit_worker, args_list)
+            pool.close()
 
         return results
 
