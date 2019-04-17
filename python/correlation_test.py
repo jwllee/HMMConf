@@ -187,6 +187,8 @@ if __name__ == '__main__':
         RANDOM_SEED_PARAM: RANDOM_SEED
     }
 
+    logger.info('EM params: \n{}'.format(EM_params))
+
     parser = argparse.ArgumentParser()
 
     parser.add_argument('-f', action='store',
