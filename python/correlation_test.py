@@ -181,7 +181,7 @@ if __name__ == '__main__':
     N_FOLDS = 5
     RANDOM_SEED = 123
     EM_params = {
-        N_JOBS: mp.cpu_count() - 1,
+        N_JOBS: mp.cpu_count(),
         N_ITER: 10,
         TOL: 5,
         RANDOM_SEED_PARAM: RANDOM_SEED
