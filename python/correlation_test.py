@@ -288,7 +288,7 @@ if __name__ == '__main__':
                     sum_dist = score[6]
                     sum_mode_dist = score[7]
                     exp_complete = score[8]
-                    mode_complete = score[7]
+                    mode_complete = score[9]
 
                     if TEST:
                         msg = '{caseid} replay {event:<3}: ' \
