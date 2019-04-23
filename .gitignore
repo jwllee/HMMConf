@@ -203,6 +203,8 @@ local.properties
 
 # End of https://www.gitignore.io/api/eclipse
 
+.svn/
 data/
 image/
 results/
+.eclipse-docker/
