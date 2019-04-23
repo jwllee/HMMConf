@@ -82,6 +82,7 @@ public class Dijkstra extends AbstractReplayAlgorithm {
 	@Override
 	protected boolean isFinal(int marking) {
 		fillMarking(tempFinalMarking, marking);
+		// System.out.println("Num of places: " + numPlaces);
 		return net.isFinalMarking(tempFinalMarking);
 	}
 

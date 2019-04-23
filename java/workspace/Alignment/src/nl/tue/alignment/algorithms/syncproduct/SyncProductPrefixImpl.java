@@ -192,13 +192,9 @@ public class SyncProductPrefixImpl implements SyncProduct {
 	public boolean isFinalMarking(byte[] marking) {
 		// for full alignments:
 		// return Arrays.equals(marking, finalMarking);
-		// final marking place of trace model
-		int placeInd = numPlaces() - 1;
-		// should check that markingLo has 1 tokens and markingHi has 0 tokens
-		// seems that the input marking does not have the markingHi blocks 
-		// but i cannot figure out how to get the start of the markingHi...
-		byte flag = (byte) 0b10000000;
-		return (marking[placeInd / 8] & flag >>> (placeInd % 8)) != 0;
+		
+		// final marking of trace model is always the last place
+		return marking[numPlaces() - 1] != 0;
 	}
 
 	public String getLabel() {

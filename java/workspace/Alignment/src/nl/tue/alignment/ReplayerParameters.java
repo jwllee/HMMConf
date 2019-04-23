@@ -23,7 +23,7 @@ public abstract class ReplayerParameters {
 	public final int initialSplits;
 	public final int maxReducedSequenceLength;
 	public final boolean buildFullStatespace;
-	public final boolean isPrefix;
+	public boolean isPrefix;
 
 	private ReplayerParameters(Algorithm algorithm, boolean moveSort, boolean queueSort, boolean preferExact,
 			int nThreads, boolean useInt, Debug debug, int timeoutMilliseconds, int maximumNumberOfStates,
@@ -46,7 +46,11 @@ public abstract class ReplayerParameters {
 		this.buildFullStatespace = buildFullStatespace;
 		this.isPrefix = isPrefix;
 	}
-
+	
+	public ReplayerParameters clone() {
+		return this.clone();
+	}
+	
 	public final static class Default extends ReplayerParameters {
 		public Default() {
 			super(Algorithm.INCREMENTALASTAR, false, true, true,
@@ -185,6 +189,13 @@ public abstract class ReplayerParameters {
 				int maxReducedSequenceLength, boolean buildFullStatespace, boolean isPrefix) {
 			super(Algorithm.DIJKSTRA, moveSort, queueSort, true, nThreads, false, debug, timeoutMilliseconds,
 					maximumNumberOfStates, costUpperBound, partiallyOrderEvents, false, 0, maxReducedSequenceLength,
+					buildFullStatespace, isPrefix);
+		}
+		
+		@Override
+		public Dijkstra clone() {
+			return new Dijkstra(moveSort, queueSort, nThreads, debug, timeoutMilliseconds,
+					maximumNumberOfStates, costUpperBound, partiallyOrderEvents, maxReducedSequenceLength,
 					buildFullStatespace, isPrefix);
 		}
 	}
