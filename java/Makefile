@@ -9,7 +9,9 @@ run: build
 	docker run -it --rm -d \
 		-e DISPLAY=unix${DISPLAY} \
 		-v /tmp/.X11-unix:/tmp/.X11-unix \
+		-v $(PWD)/../data:/home/developer/data \
 		-v $(PWD)/.eclipse-docker:/home/developer \
 		-v $(PWD)/workspace:/home/developer/workspace \
+		-v $(PWD)/results:/home/developer/results \
 		eclipse:2019-03 
 
