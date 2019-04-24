@@ -50,7 +50,8 @@ HEADER = [
     'inc_exp_distance',
     'sum_exp_distance',
     'exp_completeness',
-    'init_completeness'
+    'init_completeness',
+    'is_exception'
 ]
 
 
@@ -289,6 +290,7 @@ if __name__ == '__main__':
                     sum_mode_dist = score[7]
                     exp_complete = score[8]
                     mode_complete = score[9]
+                    is_exception = score[10]
 
                     if TEST:
                         msg = '{caseid} replay {event:<3}: ' \
@@ -296,14 +298,15 @@ if __name__ == '__main__':
                             'inc_dist: {inc_dist:.2f}, mode_dist: {mode_dist:.2f}, ' \
                             'sum_dist: {sum_dist:.2f}, sum_mode_dist: {sum_mode_dist:.2f}, ' \
                             'exp_compl: {exp_compl:.2f}, mode_compl: {mode_compl:.2f}, ' \
-                            '{state}, {like:.2f}'
+                            '{state}, {like:.2f} is_exception: {is_except}'
                         msg = msg.format(caseid=caseid, event=act, conf=conf_arr[2],
                                         compl=complete, inc_dist=exp_inc_dist,
                                         mode_dist=mode_dist, sum_dist=sum_dist,
                                         sum_mode_dist=sum_mode_dist, 
                                         exp_compl=exp_complete, 
                                         mode_compl=mode_complete,
-                                        state=ml_state, like=like_mode)
+                                        state=ml_state, like=like_mode, 
+                                        is_except=is_exception)
                         logger.info(msg)
                     
                     result_line = [
@@ -322,7 +325,8 @@ if __name__ == '__main__':
                         exp_inc_dist,
                         sum_dist,
                         exp_complete,
-                        complete
+                        complete,
+                        is_exception
                     ]
                     result_rows.append(result_line)
 
