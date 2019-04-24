@@ -142,6 +142,7 @@ class HMMConf:
         self.verbose = verbose
         self.monitor = ConvergenceMonitor(self.tol, self.n_iter, self.verbose)
         self.n_jobs = n_jobs
+        self.n_exceptions = 0
 
     def forward(self, obs, prev_obs=None, prev_fwd=None):
         """Computes the log forward probability.
@@ -152,10 +153,11 @@ class HMMConf:
         :return: log forward probability, conformance array
         """
         # logfwd, conf_arr, _, _ = self._forward(obs, prev_obs, prev_fwd)
-        logfwd, conf_arr, _, _ = _forward(self.n_states, self.transcube, self.transcube_d, 
-                                          self.emitmat, self.emitmat_d, self.confmat, 
-                                          self.conform_f, obs, prev_obs, prev_fwd, self.startprob)
-        return logfwd, conf_arr
+        logfwd, conf_arr, _, _, is_exception = _forward(self.n_states, self.transcube, self.transcube_d, 
+                                               self.emitmat, self.emitmat_d, self.confmat, 
+                                               self.conform_f, obs, prev_obs, prev_fwd, self.startprob)
+        self.n_exceptions += int(is_exception)
+        return logfwd, conf_arr, is_exception
 
     def _do_forward_pass(self, x):
         """computes the forward lattice containing the forward probability of a single sequence of
@@ -511,6 +513,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     :return: log forward probability, conformance array, log state probability, log emission probability
     """
     conf_arr = np.full(3, -1.)
+    is_exception = False
 
     if prev_fwd is None:
         # logger.debug('startprob: {}'.format(startprob))
@@ -533,6 +536,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
                 '\nlogobsprob: \n{} \nstartprob: \n{}'
             msg = msg.format(obs, logobsprob, logstartprob)
             warnings.warn(msg, category=UserWarning)
+            is_exception = True
 
             if logsumexp(logobsprob, axis=1)[0] > -np.inf:
                 logfwd = logobsprob.copy()
@@ -544,7 +548,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
         conf_arr[HMMConf.SECOND_IND] = emitconf[0]
         conf_arr[HMMConf.UPDATED_IND] = conform_f(fwd, obs, confmat, n_states)
         logstateprob = np.full((n_states, n_states), -np.inf) # zero everything
-        return logfwd, conf_arr, logstateprob, logobsprob
+        return logfwd, conf_arr, logstateprob, logobsprob, is_exception
 
     # P(Z_{t-1} | X_{1:t-1} = x_{1:t-1}), i.e., normalized forward probability at time t  - 1
     prev_stateprob = prev_fwd.copy()
@@ -599,6 +603,8 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
             '\nlogobsprob: \n{} ' \
             '\ntransitioned prev_logfwd: \n{}'.format(logobsprob, cur_fwd_est)
         warnings.warn(msg, category=UserWarning)
+        is_exception = True
+
         # trust the data if possible
         if logsumexp(logobsprob, axis=1)[0] > -np.inf:
             logfwd = logobsprob.copy()
@@ -618,7 +624,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     conf_arr[HMMConf.SECOND_IND] = emitconf[0]
     conf_arr[HMMConf.UPDATED_IND] = conform_f(stateprob, obs, confmat, n_states)
 
-    return logfwd, conf_arr, logstateprob, logobsprob
+    return logfwd, conf_arr, logstateprob, logobsprob, is_exception
 
 
 def forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
@@ -630,7 +636,7 @@ def forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     :param prev_fwd array_like, optional: previous log forward probability for all states
     :return: log forward probability, conformance array
     """
-    logfwd, conf_arr, _, _ = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d,
+    logfwd, conf_arr, _, _, _ = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d,
                                       confmat, obs, prev_obs, prev_fwd, startprob)
     return logfwd, conf_arr
 
@@ -655,7 +661,7 @@ def _do_forward_pass(x, n_states, transcube, transcube_d,
     # first observation
     obs = x[0,0]
     start = time.time()
-    fwd, conf, _, logobsprob = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
+    fwd, conf, _, logobsprob, _ = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
                                         conform_f, obs, startprob=startprob)
     end = time.time()
     times.append(end - start)
@@ -669,7 +675,7 @@ def _do_forward_pass(x, n_states, transcube, transcube_d,
     for i in range(1, n_samples):
         obs = x[i,0]
         start = time.time()
-        fwd, conf, logstateprob, logobsprob = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d,
+        fwd, conf, logstateprob, logobsprob, _ = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d,
                                                        confmat, conform_f, obs, prev_obs, prev_fwd)
         end = time.time()
         times.append(end - start)
