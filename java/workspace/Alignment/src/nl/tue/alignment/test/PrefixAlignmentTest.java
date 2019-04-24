@@ -228,7 +228,7 @@ public class PrefixAlignmentTest {
 			}
 			
 			++curLength;
-			assignName(factory, trace, curCaseId + "_" + curLength);
+			assignName(factory, trace, curCaseId + "-" + curLength);
 			
 			XEvent event = factory.createEvent();
 			assignName(factory, event, eventClass);
