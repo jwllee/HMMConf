@@ -179,7 +179,7 @@ public class PrefixAlignmentTest {
 			Marking finalMarking, XLog log, TransEvClassMapping mapping, XEventClasses classes, 
 			ReplayerParameters parameters) throws FileNotFoundException, InterruptedException, ExecutionException {
 		PrintStream stream;
-		if (debug == Debug.STATS) {
+		if (debug == Debug.STATS || debug == Debug.NORMAL) {
 			stream = new PrintStream(new File(filepath + ".csv"));
 		} else if (debug == Debug.DOT) {
 			stream = new PrintStream(new File(filepath + ".dot"));
