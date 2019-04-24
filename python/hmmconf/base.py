@@ -360,9 +360,11 @@ class HMMConf:
             # to ensure that the resulting transcube still fulfill probability matrix requirement
             row_sum = stats['trans'].sum(axis=2)
             row_ind = np.argwhere(row_sum == 0.)
-            ind0 = np.apply_along_axis(get0, 1, row_ind)
-            ind1 = np.apply_along_axis(get1, 1, row_ind)
-            stats['trans'][ind0,ind1,:] = self.transcube_d[ind0,ind1,:]
+            
+            if row_ind.shape[0] > 0:
+                ind0 = np.apply_along_axis(get0, 1, row_ind)
+                ind1 = np.apply_along_axis(get1, 1, row_ind)
+                stats['trans'][ind0,ind1,:] = self.transcube_d[ind0,ind1,:]
 
             # col_sum = stats['trans'].sum(axis=1)
             # col_ind = np.argwhere(col_sum == 0.).ravel()
@@ -391,7 +393,9 @@ class HMMConf:
             # See the above explanation
             row_sum = stats['obs'].sum(axis=1)
             row_ind = np.argwhere(row_sum == 0.).ravel()
-            stats['obs'][row_ind,:] = self.emitmat_d[row_ind,:]
+            
+            if row_ind.shape[0] > 0:
+                stats['obs'][row_ind,:] = self.emitmat_d[row_ind,:]
 
             # Can overfit if EM samples does not contain some observations so that the 
             # unobserved observation has 0 over all states, i.e., never observable
