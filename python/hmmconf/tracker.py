@@ -160,7 +160,7 @@ class ConformanceTracker(dict):
             self[caseid] = status
             prev_obs, prev_logfwd = None, None
 
-        logfwd, conf_arr = self.hmm.forward(event, prev_obs, prev_logfwd)
+        logfwd, conf_arr, is_exception = self.hmm.forward(event, prev_obs, prev_logfwd)
         exp_inc_dist = self.hmm.compute_expected_inc_distance(event, logfwd,
                                                               prev_obs, prev_logfwd)
         mode_dist = self.__compute_mode_dist(logfwd, prev_logfwd)
@@ -173,5 +173,7 @@ class ConformanceTracker(dict):
                  status.likelihood_mode, complete, 
                  exp_inc_dist, mode_dist, 
                  status.sum_dist, status.sum_mode_dist,
-                 status.exp_completeness, status.mode_completeness)
+                 status.exp_completeness, status.mode_completeness, 
+                 is_exception)
+
         return score
