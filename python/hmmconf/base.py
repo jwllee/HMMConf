@@ -537,11 +537,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
             msg = msg.format(obs, logobsprob, logstartprob)
             warnings.warn(msg, category=UserWarning)
             is_exception = True
-
-            if logsumexp(logobsprob, axis=1)[0] > -np.inf:
-                logfwd = logobsprob.copy()
-            else:
-                logfwd = logstartprob.copy()
+            logfwd[0,:] = np.log(1. / n_states)
         
         fwd = logfwd.copy()
         utils.exp_log_normalize(fwd, axis=1)
@@ -604,16 +600,7 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
             '\ntransitioned prev_logfwd: \n{}'.format(logobsprob, cur_fwd_est)
         warnings.warn(msg, category=UserWarning)
         is_exception = True
-
-        # trust the data if possible
-        if logsumexp(logobsprob, axis=1)[0] > -np.inf:
-            logfwd = logobsprob.copy()
-        # otherwise trust the current forward estimation
-        elif logsumexp(cur_fwd_est, axis=1)[0] > -np.inf:
-            logfwd = cur_fwd_est.copy()
-        else:
-            logfwd[0,:] = np.log(1. / n_states)
-
+        logfwd[0,:] = np.log(1. / n_states)
 
     stateprob = logfwd.copy()
     utils.exp_log_normalize(stateprob, axis=1)
