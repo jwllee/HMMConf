@@ -194,7 +194,7 @@ public class SyncProductPrefixImpl implements SyncProduct {
 		// return Arrays.equals(marking, finalMarking);
 		
 		// final marking of trace model is always the last place
-		return marking[numPlaces() - 1] != 0;
+		return marking[numPlaces() - 1] > 0;
 	}
 
 	public String getLabel() {
