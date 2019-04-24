@@ -627,20 +627,6 @@ def _forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
     return logfwd, conf_arr, logstateprob, logobsprob, is_exception
 
 
-def forward(n_states, transcube, transcube_d, emitmat, emitmat_d, confmat,
-            obs, prev_obs=None, prev_fwd=None, startprob=None):
-    """Computes the log forward probability.
-
-    :param obs int: observation
-    :param prev_obs int, optional: previous observation if any
-    :param prev_fwd array_like, optional: previous log forward probability for all states
-    :return: log forward probability, conformance array
-    """
-    logfwd, conf_arr, _, _, _ = _forward(n_states, transcube, transcube_d, emitmat, emitmat_d,
-                                      confmat, obs, prev_obs, prev_fwd, startprob)
-    return logfwd, conf_arr
-
-
 def _do_forward_pass(x, n_states, transcube, transcube_d, 
                      emitmat, emitmat_d, confmat, startprob, conform_f):
     """computes the forward lattice containing the forward probability of a single sequence of
