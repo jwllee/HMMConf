@@ -2,6 +2,7 @@ import numpy as np
 import os
 from datetime import datetime as dt
 from collections import deque
+from scipy.special import logsumexp
 
 from . import base, utils
 
@@ -168,12 +169,13 @@ class ConformanceTracker(dict):
 
         status.update(event, logfwd, conf_arr, complete, exp_inc_dist, mode_dist)
         self.caseid_history.appendleft(caseid)
+        seq_likelihood = np.exp(logsumexp(logfwd.ravel()))
 
         score = (conf_arr, status.most_likely_state,
                  status.likelihood_mode, complete, 
                  exp_inc_dist, mode_dist, 
                  status.sum_dist, status.sum_mode_dist,
                  status.exp_completeness, status.mode_completeness, 
-                 is_exception)
+                 is_exception, seq_likelihood)
 
         return score
