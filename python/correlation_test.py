@@ -42,6 +42,7 @@ HEADER = [
     'state_conformance',
     'emission_conformance',
     'final_conformance',
+    'sequence_likelihood',
     'most_likely_state',
     'likelihood_mode',
     'inc_mode_distance',
@@ -291,6 +292,7 @@ if __name__ == '__main__':
                     exp_complete = score[8]
                     mode_complete = score[9]
                     is_exception = score[10]
+                    seq_likelihood = score[11]
 
                     if TEST:
                         msg = '{caseid} replay {event:<3}: ' \
@@ -298,7 +300,7 @@ if __name__ == '__main__':
                             'inc_dist: {inc_dist:.2f}, mode_dist: {mode_dist:.2f}, ' \
                             'sum_dist: {sum_dist:.2f}, sum_mode_dist: {sum_mode_dist:.2f}, ' \
                             'exp_compl: {exp_compl:.2f}, mode_compl: {mode_compl:.2f}, ' \
-                            '{state}, {like:.2f} is_exception: {is_except}'
+                            'sequence likelihood: {seq_like:.2f}, {state}, {like:.2f} is_exception: {is_except}'
                         msg = msg.format(caseid=caseid, event=act, conf=conf_arr[2],
                                         compl=complete, inc_dist=exp_inc_dist,
                                         mode_dist=mode_dist, sum_dist=sum_dist,
@@ -306,7 +308,7 @@ if __name__ == '__main__':
                                         exp_compl=exp_complete, 
                                         mode_compl=mode_complete,
                                         state=ml_state, like=like_mode, 
-                                        is_except=is_exception)
+                                        is_except=is_exception, seq_like=seq_likelihood)
                         logger.info(msg)
                     
                     result_line = [
@@ -317,6 +319,7 @@ if __name__ == '__main__':
                         conf_arr[0],    # state conformance
                         conf_arr[1],    # emission conformance
                         conf_arr[2],    # final conformance
+                        seq_likelihood,
                         ml_state, 
                         like_mode,
                         mode_dist,
