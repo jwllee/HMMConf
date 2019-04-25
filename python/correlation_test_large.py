@@ -36,7 +36,6 @@ RANDOM_SEED_PARAM = 'random_seed'
 
 HEADER = [
     'fold_id',
-    'log_name',
     'caseid',
     'activity',
     'activity_id',
@@ -284,7 +283,7 @@ if __name__ == '__main__':
             took_fit = end_fit - start_fit
             logger.info('Training using {} cases took: {:.2f}s'.format(len(caseid_fold), took_fit))
             for row in test_event_df[[CASEID, ACTIVITY, ACTIVITY_ID]].itertuples(index=False):
-                log_name, caseid = row.caseid.split(':')
+                caseid = row.caseid
                 event = row.activity_id
                 act = row.activity
 
@@ -321,7 +320,6 @@ if __name__ == '__main__':
                 
                 result_line = [
                     fold_id, 
-                    log_name,
                     caseid,
                     act,
                     event,
@@ -349,6 +347,11 @@ if __name__ == '__main__':
         result_fp = os.path.join(RESULT_DIR, result_fname)
 
         result_df = pd.DataFrame.from_records(result_rows, columns=HEADER)
+        # split caseid to log_name and caseid
+        split = result_df[CASEID].str.split(pat=':', expand=True)
+        split.columns = ['log', CASEID]
+        result_df.drop(columns=[CASEID], inplace=True)
+        result_df = pd.concat([split, result_df], axis=1)
         result_df.to_csv(result_fp, index=None)
 
         end_net = time.time()
