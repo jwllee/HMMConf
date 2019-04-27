@@ -228,15 +228,6 @@ if __name__ == '__main__':
             logger.info('Modify place names...')
             modify_place_name(net)
 
-            logger.info('Process net...')
-            rg = process_net(net, init_marking, final_marking)
-
-            logger.info('Setting up HMM...')
-            hmm = setup_hmm(rg, EM_params)
-
-            logger.info('Make conformance tracker...')
-            tracker = make_conformance_tracker(hmm)
-
             if TEST:
                 caseids = data_df[CASEID].unique()[-100:]
                 to_include = data_df[CASEID].isin(caseids)
@@ -269,12 +260,23 @@ if __name__ == '__main__':
 
                 logger.info('EMing on {} cases'.format(len(caseid_fold)))
 
+                logger.info('Process net...')
+                rg = process_net(net, init_marking, final_marking)
+
+                logger.info('Setting up HMM...')
+                hmm = setup_hmm(rg, EM_params)
+
+                logger.info('Make conformance tracker...')
+                tracker = make_conformance_tracker(hmm)
+
                 X, lengths = event_df_to_hmm_format(train_event_df)
                 start_fit = time.time()
                 tracker.hmm.fit(X, lengths)
                 end_fit = time.time()
                 took_fit = end_fit - start_fit
                 logger.info('Training using {} cases took: {:.2f}s'.format(len(caseid_fold), took_fit))
+                start_conf = time.time()
+
                 for row in test_event_df.itertuples(index=False):
                     caseid = row.caseid
                     event = row.activity_id
@@ -332,6 +334,13 @@ if __name__ == '__main__':
                         is_exception
                     ]
                     result_rows.append(result_line)
+
+                end_conf = time.time()
+                took_conf = end_conf - start_conf
+                msg = 'Took {:.2f}s for {} instances, {:.5f}ms per instance.'
+                n_test = test_event_df.shape[0]
+                msg = msg.format(took_conf, n_test, took_conf / n_test * 1000.)
+                logger.info(msg)
 
             if TEST:
                 log_fname = log_fname + '_test'
