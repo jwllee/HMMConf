@@ -208,3 +208,6 @@ data/
 image/
 results/
 .eclipse-docker/
+results.*/
+images/
+*.csv
