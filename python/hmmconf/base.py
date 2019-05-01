@@ -297,8 +297,8 @@ class HMMConf:
 
             for i in range(len(results)):
                 logprob_i, stats_i = results[i]
-                stats['trans'] += stats_i['trans']
-                stats['obs'] += stats_i['obs']
+                np.logaddexp(stats[TRANS_LOG_NUMERATOR], stats_i[TRANS_LOG_NUMERATOR], out=stats[TRANS_LOG_NUMERATOR])
+                stats[OBS_NUMERATOR] += stats_i[OBS_NUMERATOR]
                 stats['start'] += stats_i['start']
                 stats['nobs'] += stats_i['nobs']
                 cur_logprob += logprob_i
@@ -355,16 +355,31 @@ class HMMConf:
             utils.normalize(self.startprob, axis=1)
 
         if 't' in self.params:
+            # divide accumulated numerator by denominator
+            n_obs = self.n_obs
+            trans_numerator = stats[TRANS_LOG_NUMERATOR]
+            trans_denominator = logsumexp(trans_numerator, axis=2)
+
+            for o in range(n_obs):
+                denominator_o = trans_denominator[o,:].ravel()[:,np.newaxis]
+                # only update values if sample affected the state-transition between i and j for o
+                to_update = denominator_o != -np.inf
+                # log_xi_sum[o,:] = np.subtract(log_xi_sum[o,:], denominator[o,:], where=to_update)
+                np.subtract(trans_numerator[o,:,:], denominator_o, out=trans_numerator[o,:,:], where=to_update)
+
+            with np.errstate(under='ignore'):
+                trans = np.exp(trans_numerator)
+
+            # to ensure that the resulting transcube still fulfill probability matrix requirement
             get0 = lambda a: a[0]
             get1 = lambda a: a[1]
-            # to ensure that the resulting transcube still fulfill probability matrix requirement
-            row_sum = stats['trans'].sum(axis=2)
+            row_sum = trans.sum(axis=2)
             row_ind = np.argwhere(row_sum == 0.)
-            
+                
             if row_ind.shape[0] > 0:
                 ind0 = np.apply_along_axis(get0, 1, row_ind)
                 ind1 = np.apply_along_axis(get1, 1, row_ind)
-                stats['trans'][ind0,ind1,:] = self.transcube_d[ind0,ind1,:]
+                trans[ind0,ind1,:] = self.transcube_d[ind0,ind1,:]
 
             # col_sum = stats['trans'].sum(axis=1)
             # col_ind = np.argwhere(col_sum == 0.).ravel()
@@ -383,19 +398,28 @@ class HMMConf:
             #     col_sum = stats['trans'].sum(axis=0)
             #     col_ind = np.argwhere(col_sum == 0.).ravel()
             #     stats['trans'][o,:,col_ind] += 1e-4
-            self.transcube_d = stats['trans'] # + self.transcube_d
+            self.transcube_d = trans # + self.transcube_d
             utils.normalize(self.transcube_d, axis=2)   # normalize row
             # self.__check_transcube(self.transcube_d)
 
         if 'o' in self.params:
+            obs_numerator = stats[OBS_NUMERATOR]
+            obs_denominator = obs_numerator.sum(axis=1)[:,np.newaxis]
+
+            # only update matrix if the sample affected the emission probability
+            to_update = obs_denominator != 0.
+            # np.divide(stats['obs'], denominator, out=stats['obs'], where=to_update)
+            np.divide(obs_numerator, obs_denominator, out=obs_numerator, where=to_update)
+            obs = obs_numerator
+
             # if np.isnan(stats['obs']).any():
             #    raise ValueError('stats[obs] has nan: \n{}'.format(stats['obs']))
             # See the above explanation
-            row_sum = stats['obs'].sum(axis=1)
+            row_sum = obs.sum(axis=1)
             row_ind = np.argwhere(row_sum == 0.).ravel()
             
             if row_ind.shape[0] > 0:
-                stats['obs'][row_ind,:] = self.emitmat_d[row_ind,:]
+                obs[row_ind,:] = self.emitmat_d[row_ind,:]
 
             # Can overfit if EM samples does not contain some observations so that the 
             # unobserved observation has 0 over all states, i.e., never observable
@@ -404,7 +428,7 @@ class HMMConf:
             # col_ind = np.argwhere(col_sum == 0.).ravel()
             # stats['obs'][:,col_ind] += 1e-4
 
-            self.emitmat_d = stats['obs'] # + self.emitmat_d
+            self.emitmat_d = obs # + self.emitmat_d
             utils.normalize(self.emitmat_d, axis=1)
             # self.__check_emitmat(self.emitmat_d)
 
@@ -738,6 +762,10 @@ def _compute_posteriors(fwdlattice, bwdlattice):
         return np.exp(log_gamma)
 
 
+TRANS_LOG_NUMERATOR = 'trans_log_numerator'
+OBS_NUMERATOR = 'obs_numerator'
+
+
 def _initialize_sufficient_statistics(start_shape, transcube_shape, emitmat_shape):
     """Initialize sufficient statistics.
 
@@ -745,8 +773,8 @@ def _initialize_sufficient_statistics(start_shape, transcube_shape, emitmat_shap
     """
     stats = {'nobs': 0,
              'start': np.zeros(start_shape),
-             'trans': np.zeros(transcube_shape),
-             'obs': np.zeros(emitmat_shape)}
+             TRANS_LOG_NUMERATOR: np.zeros(transcube_shape),
+             OBS_NUMERATOR: np.zeros(emitmat_shape)}
     return stats
 
 
@@ -789,21 +817,9 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
                 for j in range(n_states):
                     to_add = (fwdlattice[t, i] + logstateprob[t, i, j]
                                 + logobsprob[t + 1, j] + bwdlattice[t + 1, j])
-                    log_xi_sum[o, i, j] = np.logaddexp(log_xi_sum[o, i, j], to_add)
+                    np.logaddexp(log_xi_sum[o, i, j], to_add, out=log_xi_sum[o, i, j])
 
-        denominator = logsumexp(log_xi_sum, axis=2)
-
-        # utils.assert_shape('denominator', (n_obs, n_states), denominator.shape)
-
-        for o in range(n_obs):
-            denominator_o = denominator[o,:].ravel()[:,np.newaxis]
-            # only update values if sample affected the state-transition between i and j for o
-            to_update = denominator_o != -np.inf
-            # log_xi_sum[o,:] = np.subtract(log_xi_sum[o,:], denominator[o,:], where=to_update)
-            np.subtract(log_xi_sum[o,:,:], denominator_o, out=log_xi_sum[o,:,:], where=to_update)
-
-        with np.errstate(under='ignore'):
-            stats['trans'] += np.exp(log_xi_sum)
+        np.logaddexp(stats[TRANS_LOG_NUMERATOR], log_xi_sum, out=stats[TRANS_LOG_NUMERATOR])
 
     if 'o' in params:
         n_samples = logobsprob.shape[0]
@@ -825,21 +841,7 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
         if n_deviations == 0:
             return
 
-        # denominator = stats['obs'].sum(axis=1)[:, np.newaxis]
-        denominator = xi_sum.sum(axis=1)[:,np.newaxis]
-        # avoid zero division by replacement as 1.
-        # denominator[denominator == 0.] = 1.
-        # stats['obs'] /= denominator
-
-        # only update matrix if the sample affected the emission probability
-        to_update = denominator != 0.
-        # np.divide(stats['obs'], denominator, out=stats['obs'], where=to_update)
-        np.divide(xi_sum, denominator, out=xi_sum, where=to_update)
-
-        # if np.isnan(xi_sum).any():
-        #     raise ValueError('xi_sum has nan: \n{}'.format(xi_sum))
-
-        stats['obs'] += xi_sum
+        stats[OBS_NUMERATOR] += xi_sum
 
 
 def _fit_worker(args):
