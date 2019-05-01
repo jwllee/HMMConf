@@ -119,6 +119,9 @@ def setup_hmm(rg, EM_params):
     # deal with initial marking and get start probability
     is_inv = lambda t: t.name is None
     startprob = hmmconf.compute_startprob(rg, node_map, n_states, is_inv)
+    # add epsilon mass to all states
+    startprob += 1e-5
+    hmmconf.utils.normalize(startprob, axis=1)
 
     # remove invisible transitions 
     to_remove = list()
