@@ -186,7 +186,7 @@ def connect_inv_markings(rg, inv_states, is_inv):
 
             if n_inv > 0:
                 # diminish t's weight to connect to next states
-                w = t.data['weight'] / n_inv
+                w = t.data['weight'] / (n_inv + 1)
                 t.data['weight'] = w
                 for state in to_connect_t:
                     data = {'weight': w}
@@ -194,22 +194,6 @@ def connect_inv_markings(rg, inv_states, is_inv):
         
         for name, from_state, to_state, rg, data in to_connect:
             add_arc_from_to(name, from_state, to_state, rg, data)
-
-    # removal of invisible transition
-    for in_state, inv_tran, out_state in inv_states:
-        if in_state.name == init.name:
-            continue
-        # check if the out_state only has invisible transition edges
-        n_vis = 0
-        for in_tran in out_state.incoming:
-            if not is_inv(in_tran):
-                n_vis += 1
-        if n_vis == 0:
-            continue
-
-        in_state.outgoing.remove(inv_tran)
-        out_state.incoming.remove(inv_tran)
-        rg.transitions.remove(inv_tran)
 
 
 def collapse_inv_trans(rg, inv_states):
