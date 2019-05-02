@@ -186,7 +186,7 @@ def connect_inv_markings(rg, inv_states, is_inv):
 
             if n_inv > 0:
                 # diminish t's weight to connect to next states
-                w = t.data['weight'] / n_inv
+                w = t.data['weight'] / (n_inv + 1)
                 t.data['weight'] = w
                 for state in to_connect_t:
                     data = {'weight': w}
