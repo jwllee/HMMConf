@@ -100,7 +100,7 @@ def setup_hmm(rg):
 
 
 def make_conformance_tracker(hmm):
-    return hmmconf.ConformanceTracker(hmm, max_n_case=100)
+    return hmmconf.ConformanceTracker(hmm, max_n_case=10000)
 
 
 def event_df_to_hmm_format(df):
@@ -254,7 +254,7 @@ if __name__ == '__main__':
     # logger.info('Training {} cases took: {:.2f}s'.format(n_cases, fit_took))
 
     time_cols = [
-        'event', 'n_cases', 'total time',
+        'event', 'n_cases', 'total time', 
         'Average processing time per event',
         'local avg time'
     ]
