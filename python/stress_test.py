@@ -100,7 +100,7 @@ def setup_hmm(rg):
 
 
 def make_conformance_tracker(hmm):
-    return hmmconf.ConformanceTracker(hmm, max_n_case=100)
+    return hmmconf.ConformanceTracker(hmm, max_n_case=10000)
 
 
 def event_df_to_hmm_format(df):
@@ -141,6 +141,56 @@ def sizeof_hmm(hmm):
 
     return size_obj
 
+
+def sizeof_status(s):
+    size_obj = sys.getsizeof(s)
+    size_obj += (s.startprob.size * s.startprob.itemsize)
+    size_obj += (s.logfwd.size * s.logfwd.itemsize)
+    size_obj += (s.state_est.size * s.state_est.itemsize)
+    size_obj += sys.getsizeof(s.max_history)
+    size_obj += sys.getsizeof(s.last_update)
+    size_obj += sys.getsizeof(s.sum_dist)
+    size_obj += sys.getsizeof(s.sum_mode_dist)
+    size_obj += sys.getsizeof(s.n_events)
+    size_obj += sys.getsizeof(s.sum_dist)
+    size_obj += sys.getsizeof(s.sum_mode_dist)
+    size_obj += sys.getsizeof(s.n_events)
+
+    for key, val in hmm.int2obs.items():
+        size_obj += sys.getsizeof(key)
+        size_obj += sys.getsizeof(val)
+
+    for key, val in hmm.int2state.items():
+        size_obj += sys.getsizeof(key)
+        size_obj += sys.getsizeof(val)
+
+    for v in s.completeness_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.conformance_history:
+        size_obj += (v.size * v.itemsize)
+
+    for v in s.activity_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.inc_dist_history:
+        size_obj += (v.size * v.itemsize)
+
+    for v in s.mode_dist_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.state_est_history:
+        size_obj += (v.size * v.itemsize)
+
+    for v in s.exp_completeness_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.mode_completeness_history:
+        size_obj += sys.getsizeof(v)
+
+    return size_obj
+
+
 # Follows https://docs.python.org/3/library/sys.html
 def sizeof_tracker(t):
     assert isinstance(t, hmmconf.ConformanceTracker)
@@ -148,11 +198,12 @@ def sizeof_tracker(t):
     # avoid double counting
     size_obj -= sys.getsizeof(t.hmm) 
     size_obj += sizeof_hmm(t.hmm)
+    # logger.info('Number of cases: {}'.format(len(t.caseid_history)))
     for caseid in t.caseid_history:
         size_obj += sys.getsizeof(caseid)
-    for key, item in t.items():
+    for key, status in t.items():
         size_obj += sys.getsizeof(key)
-        size_obj += sys.getsizeof(item)
+        size_obj += sizeof_status(status)
     return size_obj
 
 
@@ -181,9 +232,6 @@ if __name__ == '__main__':
     print('Setting up HMM...')
     hmm = setup_hmm(rg)
 
-    print('Make conformance tracker...')
-    _tracker = make_conformance_tracker(hmm)
-
     caseids = data_df[CASEID].unique()[-100:]
     to_include = data_df[CASEID].isin(caseids)
     # caseids = ['case_34'] # warm start example
@@ -206,24 +254,27 @@ if __name__ == '__main__':
     # logger.info('Training {} cases took: {:.2f}s'.format(n_cases, fit_took))
 
     time_cols = [
-        'event', 'total time', 
+        'event', 'n_cases', 'total time', 
         'Average processing time per event',
         'local avg time'
     ]
 
     mem_cols = [
-        'event', 'Total space used (MB)'
+        'event', 'n_cases', 'Total space used (MB)'
     ]
+
+    # memory test
+    print('Doing memory test...')
+    print('Make conformance tracker...')
+    _tracker = make_conformance_tracker(hmm)
 
     print('Tracker size: {:.0f}MB'.format(sizeof_tracker_mb(_tracker)))
 
     mem_lines = list()
-    mem_lines.append((0, int(sizeof_tracker_mb(_tracker))))
+    mem_lines.append((0, 0, sizeof_tracker_mb(_tracker)))
 
     total_events = 0
     
-    # memory test
-    print('Doing memory test...')
     for row in filtered_df.itertuples(index=False):
         caseid = row.caseid
         event = row.activity_id
@@ -237,21 +288,28 @@ if __name__ == '__main__':
         total_events += 1
 
         if total_events % 10000 == 0:
-            print('Total events: {}'.format(total_events))
+            size_tracker = sizeof_tracker_mb(_tracker)
+            n_cases = len(_tracker)
+            msg = 'Total events: {}, ' \
+                  'Number of cases: {}, ' \
+                  'Memory: {:.2f}MB'.format(total_events, n_cases, size_tracker)
+            print(msg)
             # start_i = time.time()
-            line_i = (total_events, int(sizeof_tracker_mb(_tracker)))
+            line_i = (total_events, n_cases, size_tracker)
             # end_i = time.time()
             # print('took {:.2f}s to count mem'.format(end_i - start_i))
             mem_lines.append(line_i)
 
     # time test
     time_lines = list()
-    time_lines.append((0, '', '', ''))
+    time_lines.append((0, 0, '', '', ''))
     total_events = 0
     total_time = 0
     local_avg = 0
 
     print('Doing time test...')
+    print('Make conformance tracker...')
+    _tracker = make_conformance_tracker(hmm)
     for row in filtered_df.itertuples(index=False):
         caseid = row.caseid
         event = row.activity_id
@@ -266,10 +324,17 @@ if __name__ == '__main__':
         total_events += 1
 
         if total_events % 10000 == 0:
-            print('Total events: {}'.format(total_events))
+            n_cases = len(_tracker)
             avg_time = total_time / total_events
             local_avg = local_avg / 10000
-            line_i = (total_events, total_time, avg_time, local_avg)
+            msg = 'Total events: {}, ' \
+                  'Number of cases: {}, ' \
+                  'Total time: {:.2f}ms, ' \
+                  'Average time: {:.2f}ms, ' \
+                  'Local average time: {:.2f}ms'
+            msg = msg.format(total_events, n_cases, total_time, avg_time, local_avg)
+            print(msg)
+            line_i = (total_events, n_cases, total_time, avg_time, local_avg)
             time_lines.append(line_i)
             local_avg = 0
 
@@ -277,7 +342,10 @@ if __name__ == '__main__':
     time_df = pd.DataFrame.from_records(time_lines, columns=time_cols)
 
     out_fp = 'results-stress-test.csv'
-    df = pd.merge(time_df, mem_df, on='event')
+    df = pd.merge(time_df, mem_df, on=['event', 'n_cases'])
+    err_msg = 'Merged results dataframe ({}) does not have the same number of rows as mem_df ({}) and time_df ({})'
+    err_msg = err_msg.format(df.shape[0], mem_df.shape[0], time_df.shape[0])
+    assert df.shape[0] == mem_df.shape[0] and df.shape[0] == time_df.shape[0], err_msg
     df.to_csv(out_fp, index=None)
 
     end = time.time()
