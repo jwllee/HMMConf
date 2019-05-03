@@ -232,9 +232,6 @@ if __name__ == '__main__':
     print('Setting up HMM...')
     hmm = setup_hmm(rg)
 
-    print('Make conformance tracker...')
-    _tracker = make_conformance_tracker(hmm)
-
     caseids = data_df[CASEID].unique()[-100:]
     to_include = data_df[CASEID].isin(caseids)
     # caseids = ['case_34'] # warm start example
@@ -266,6 +263,11 @@ if __name__ == '__main__':
         'event', 'Total space used (MB)'
     ]
 
+    # memory test
+    print('Doing memory test...')
+    print('Make conformance tracker...')
+    _tracker = make_conformance_tracker(hmm)
+
     print('Tracker size: {:.0f}MB'.format(sizeof_tracker_mb(_tracker)))
 
     mem_lines = list()
@@ -273,8 +275,6 @@ if __name__ == '__main__':
 
     total_events = 0
     
-    # memory test
-    print('Doing memory test...')
     for row in filtered_df.itertuples(index=False):
         caseid = row.caseid
         event = row.activity_id
@@ -303,6 +303,8 @@ if __name__ == '__main__':
     local_avg = 0
 
     print('Doing time test...')
+    print('Make conformance tracker...')
+    _tracker = make_conformance_tracker(hmm)
     for row in filtered_df.itertuples(index=False):
         caseid = row.caseid
         event = row.activity_id
