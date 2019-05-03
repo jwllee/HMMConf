@@ -141,6 +141,56 @@ def sizeof_hmm(hmm):
 
     return size_obj
 
+
+def sizeof_status(s):
+    size_obj = sys.getsizeof(s)
+    size_obj += (s.startprob.size * s.startprob.itemsize)
+    size_obj += (s.logfwd.size * s.logfwd.itemsize)
+    size_obj += (s.state_est.size * s.state_est.itemsize)
+    size_obj += sys.getsizeof(s.max_history)
+    size_obj += sys.getsizeof(s.last_update)
+    size_obj += sys.getsizeof(s.sum_dist)
+    size_obj += sys.getsizeof(s.sum_mode_dist)
+    size_obj += sys.getsizeof(s.n_events)
+    size_obj += sys.getsizeof(s.sum_dist)
+    size_obj += sys.getsizeof(s.sum_mode_dist)
+    size_obj += sys.getsizeof(s.n_events)
+
+    for key, val in hmm.int2obs.items():
+        size_obj += sys.getsizeof(key)
+        size_obj += sys.getsizeof(val)
+
+    for key, val in hmm.int2state.items():
+        size_obj += sys.getsizeof(key)
+        size_obj += sys.getsizeof(val)
+
+    for v in s.completeness_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.conformance_history:
+        size_obj += (v.size * v.itemsize)
+
+    for v in s.activity_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.inc_dist_history:
+        size_obj += (v.size * v.itemsize)
+
+    for v in s.mode_dist_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.state_est_history:
+        size_obj += (v.size * v.itemsize)
+
+    for v in s.exp_completeness_history:
+        size_obj += sys.getsizeof(v)
+
+    for v in s.mode_completeness_history:
+        size_obj += sys.getsizeof(v)
+
+    return size_obj
+
+
 # Follows https://docs.python.org/3/library/sys.html
 def sizeof_tracker(t):
     assert isinstance(t, hmmconf.ConformanceTracker)
@@ -148,11 +198,12 @@ def sizeof_tracker(t):
     # avoid double counting
     size_obj -= sys.getsizeof(t.hmm) 
     size_obj += sizeof_hmm(t.hmm)
+    # logger.info('Number of cases: {}'.format(len(t.caseid_history)))
     for caseid in t.caseid_history:
         size_obj += sys.getsizeof(caseid)
-    for key, item in t.items():
+    for key, status in t.items():
         size_obj += sys.getsizeof(key)
-        size_obj += sys.getsizeof(item)
+        size_obj += sizeof_status(status)
     return size_obj
 
 
