@@ -254,13 +254,13 @@ if __name__ == '__main__':
     # logger.info('Training {} cases took: {:.2f}s'.format(n_cases, fit_took))
 
     time_cols = [
-        'event', 'total time', 
+        'event', 'n_cases', 'total time',
         'Average processing time per event',
         'local avg time'
     ]
 
     mem_cols = [
-        'event', 'Total space used (MB)'
+        'event', 'n_cases', 'Total space used (MB)'
     ]
 
     # memory test
@@ -271,7 +271,7 @@ if __name__ == '__main__':
     print('Tracker size: {:.0f}MB'.format(sizeof_tracker_mb(_tracker)))
 
     mem_lines = list()
-    mem_lines.append((0, int(sizeof_tracker_mb(_tracker))))
+    mem_lines.append((0, 0, sizeof_tracker_mb(_tracker)))
 
     total_events = 0
     
@@ -288,16 +288,21 @@ if __name__ == '__main__':
         total_events += 1
 
         if total_events % 10000 == 0:
-            print('Total events: {}'.format(total_events))
+            size_tracker = sizeof_tracker_mb(_tracker)
+            n_cases = len(_tracker)
+            msg = 'Total events: {}, ' \
+                  'Number of cases: {}, ' \
+                  'Memory: {:.2f}MB'.format(total_events, n_cases, size_tracker)
+            print(msg)
             # start_i = time.time()
-            line_i = (total_events, int(sizeof_tracker_mb(_tracker)))
+            line_i = (total_events, n_cases, size_tracker)
             # end_i = time.time()
             # print('took {:.2f}s to count mem'.format(end_i - start_i))
             mem_lines.append(line_i)
 
     # time test
     time_lines = list()
-    time_lines.append((0, '', '', ''))
+    time_lines.append((0, 0, '', '', ''))
     total_events = 0
     total_time = 0
     local_avg = 0
@@ -319,10 +324,17 @@ if __name__ == '__main__':
         total_events += 1
 
         if total_events % 10000 == 0:
-            print('Total events: {}'.format(total_events))
+            n_cases = len(_tracker)
             avg_time = total_time / total_events
             local_avg = local_avg / 10000
-            line_i = (total_events, total_time, avg_time, local_avg)
+            msg = 'Total events: {}, ' \
+                  'Number of cases: {}, ' \
+                  'Total time: {:.2f}ms, ' \
+                  'Average time: {:.2f}ms, ' \
+                  'Local average time: {:.2f}ms'
+            msg = msg.format(total_events, n_cases, total_time, avg_time, local_avg)
+            print(msg)
+            line_i = (total_events, n_cases, total_time, avg_time, local_avg)
             time_lines.append(line_i)
             local_avg = 0
 
@@ -330,7 +342,10 @@ if __name__ == '__main__':
     time_df = pd.DataFrame.from_records(time_lines, columns=time_cols)
 
     out_fp = 'results-stress-test.csv'
-    df = pd.merge(time_df, mem_df, on='event')
+    df = pd.merge(time_df, mem_df, on=['event', 'n_cases'])
+    err_msg = 'Merged results dataframe ({}) does not have the same number of rows as mem_df ({}) and time_df ({})'
+    err_msg = err_msg.format(df.shape[0], mem_df.shape[0], time_df.shape[0])
+    assert df.shape[0] == mem_df.shape[0] and df.shape[0] == time_df.shape[0], err_msg
     df.to_csv(out_fp, index=None)
 
     end = time.time()
