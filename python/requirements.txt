@@ -4,3 +4,4 @@ cython
 hmmlearn
 matplotlib
 scikit-learn
+numba

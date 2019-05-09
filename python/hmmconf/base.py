@@ -6,6 +6,7 @@ import pandas as pd
 import warnings, sys, time, string
 from . import utils
 import multiprocessing as mp
+from numba import njit
 
 
 __all__ = [
@@ -771,11 +772,28 @@ def _initialize_sufficient_statistics(start_shape, transcube_shape, emitmat_shap
 
     :return: sufficient statistics
     """
-    stats = {'nobs': 0,
-             'start': np.zeros(start_shape),
-             TRANS_LOG_NUMERATOR: np.zeros(transcube_shape),
-             OBS_NUMERATOR: np.zeros(emitmat_shape)}
+    stats = dict()
+    stats['nobs'] = 0
+    stats['start'] = np.zeros(start_shape)
+    stats[TRANS_LOG_NUMERATOR] = np.zeros(transcube_shape)
+    stats[OBS_NUMERATOR] = np.zeros(emitmat_shape)
     return stats
+
+
+@njit
+def __accumulate_transcube(conflattice, n_samples, n_states, fwdlattice, 
+                         logstateprob, logobsprob, bwdlattice, log_xi_sum, X):
+    for t in range(n_samples - 1):
+        # skip events that are perfectly conforming
+        if conflattice[t, 2] >= 1.:  
+            continue
+
+        o = X[t]    # to identify the state transition matrix to update
+        for i in range(n_states):
+            for j in range(n_states):
+                to_add = (fwdlattice[t, i] + logstateprob[t, i, j]
+                            + logobsprob[t + 1, j] + bwdlattice[t + 1, j])
+                log_xi_sum[o, i, j] = np.logaddexp(log_xi_sum[o, i, j], to_add)
 
 
 def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, conflattice, 
@@ -807,18 +825,20 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
 
         log_xi_sum = np.full((n_obs, n_states, n_states), -np.inf)
 
-        for t in range(n_samples - 1):
-            # skip events that are perfectly conforming
-            if conflattice[t, HMMConf.UPDATED_IND] >= 1.:  
-                continue
-
-            o = X[t]    # to identify the state transition matrix to update
-            for i in range(n_states):
-                for j in range(n_states):
-                    to_add = (fwdlattice[t, i] + logstateprob[t, i, j]
-                                + logobsprob[t + 1, j] + bwdlattice[t + 1, j])
-                    np.logaddexp(log_xi_sum[o, i, j], to_add, out=log_xi_sum[o, i, j])
-
+#         for t in range(n_samples - 1):
+#             # skip events that are perfectly conforming
+#             if conflattice[t, 2] >= 1.:  
+#                 continue
+# 
+#             o = X[t]    # to identify the state transition matrix to update
+#             for i in range(n_states):
+#                 for j in range(n_states):
+#                     to_add = (fwdlattice[t, i] + logstateprob[t, i, j]
+#                                 + logobsprob[t + 1, j] + bwdlattice[t + 1, j])
+#                     np.logaddexp(log_xi_sum[o, i, j], to_add, out=log_xi_sum[o, i, j])
+        __accumulate_transcube(conflattice, n_samples, n_states, fwdlattice, 
+                               logstateprob, logobsprob, bwdlattice, log_xi_sum, X)
+ 
         np.logaddexp(stats[TRANS_LOG_NUMERATOR], log_xi_sum, out=stats[TRANS_LOG_NUMERATOR])
 
     if 'o' in params:
@@ -826,6 +846,7 @@ def _accumulate_sufficient_statistics(stats, X, logstateprob, logobsprob, confla
 
         xi_sum = np.zeros((n_states, n_obs))
         n_deviations = 0
+
         for t, symbol in enumerate(np.concatenate(X)):
             # skip if it's perfectly conforming
             if conflattice[t, HMMConf.UPDATED_IND] >= 1.:
