@@ -6,6 +6,11 @@ import numpy as np
 np.set_printoptions(precision=10)
 
 
+FORMAT_MINIMAL = 'format_minimal'
+HANDLER_MINIMAL = 'handler_minimal'
+LOGGER_MINIMAL = 'logger_minimal'
+
+
 # set standard logging configurations
 logging.config.dictConfig({
     'version': 1,
@@ -14,6 +19,9 @@ logging.config.dictConfig({
         'standard': {
             'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
         },
+        FORMAT_MINIMAL: {
+            'format': '%(message)s'
+        }
     },
     'handlers': {
         'default': {
@@ -21,13 +29,23 @@ logging.config.dictConfig({
             'class': 'logging.StreamHandler',
             'formatter': 'standard'
         },
+        HANDLER_MINIMAL: {
+            'level': 'DEBUG',
+            'class': 'logging.StreamHandler',
+            'formatter': FORMAT_MINIMAL
+        },
     },
     'loggers': {
         '': {
             'handlers': ['default'],
             'level': 'INFO',
             'propagate': True
-        }
+        },
+        LOGGER_MINIMAL: {
+            'handlers': [HANDLER_MINIMAL],
+            'level': 'DEBUG',
+            'propagate': True
+        },
     }
 })
 
