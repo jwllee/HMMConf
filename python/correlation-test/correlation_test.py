@@ -14,9 +14,9 @@ np.set_printoptions(precision=2)
 logger = hmmconf.utils.make_logger(__file__)
 
 
-MODEL_DIR = os.path.join('..', 'data', 'BPM2018', 'correlation-tests', 'models')
-LOG_DIR = os.path.join('..', 'data', 'BPM2018', 'correlation-tests', 'logs', 'processed')
-RESULT_DIR = os.path.join('.', 'results')
+MODEL_DIR = os.path.join('..', '..', 'data', 'BPM2018', 'correlation-tests', 'models')
+LOG_DIR = os.path.join('..', '..', 'data', 'BPM2018', 'correlation-tests', 'logs', 'processed')
+RESULT_DIR = os.path.join('..', 'results')
 
 
 if not os.path.isdir(RESULT_DIR):
