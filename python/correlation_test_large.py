@@ -158,7 +158,7 @@ def setup_hmm(rg, EM_params):
 
 
 def make_conformance_tracker(hmm):
-    return hmmconf.ConformanceTracker(hmm)
+    return hmmconf.ConformanceTracker(hmm, max_n_case=100000)
 
 
 def event_df_to_hmm_format(df):
