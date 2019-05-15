@@ -10,7 +10,7 @@ The python directory contains the implementation
 of the proposed HMM-based approach and scripts for running experiments.
 
 ## Acknowledgement:
-I want to acknowledge and thank the [hmmlearn](https://github.com/hmmlearn/hmmlearn); 
+I want to acknowledge and thank the [hmmlearn](https://github.com/hmmlearn/hmmlearn) package; 
 I had used this as a reference for my implementation of the modified HMM
 proposed in the paper.
 
