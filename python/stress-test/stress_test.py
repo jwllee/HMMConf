@@ -9,8 +9,8 @@ from itertools import chain
 from collections import deque
 
 
-MODEL_FP = os.path.join('..', 'data', 'BPM2018', 'stress-test', 'model.pnml')
-DATA_FP = os.path.join('..', 'data', 'BPM2018', 'stress-test', 'filtered-stream.csv')
+MODEL_FP = os.path.join('..', '..', 'data', 'BPM2018', 'stress-test', 'model.pnml')
+DATA_FP = os.path.join('..', '..', 'data', 'BPM2018', 'stress-test', 'filtered-stream.csv')
 
 ACTIVITY = 'activity'
 ACTIVITY_ID = 'activity_id'
