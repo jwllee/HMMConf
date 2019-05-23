@@ -13,5 +13,5 @@ of the proposed HMM-based approach and scripts for running experiments.
 This is implemented by modifying the `isFinalMarking` function of the
 `SyncProduct` class. To only require that the log projection of the alignment
 corresponds to the trace, we require that the sink place of the trace net to
-have at least one token. Given the A\* algorithm property, the alignment we get
-at the first time we achieve the condition should be optimal.
+have at least one token. Given the A\* algorithm property, when we achieve this
+condition for the first time, the alignment we get should be optimal.
