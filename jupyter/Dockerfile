@@ -11,7 +11,7 @@ RUN apt-get update && apt-get install -y \
 	git \
 	vim \
 	make \
-	build-essential
+	build-essential 
  
 ENV HOME=/home/jovyan
 WORKDIR $HOME
@@ -26,7 +26,15 @@ RUN git clone --recursive https://github.com/jwllee/.vim.git .vim \
 	&& cd $HOME/.vim \
 	&& git submodule update --init
 
-RUN pip install PyQt5
+# packages for PM4Py
+RUN apt-get update && apt-get install -y \
+	graphviz \
+	libblas-dev \
+	liblapack-dev \
+	libsuitesparse-dev \
+	python3-tk
+
+ADD ./requirements.txt $HOME
+RUN pip install --user -r ./requirements.txt
 
 # Switch back to jovyan to avoid accidental container runs as root
-USER $NB_UID

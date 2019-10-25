@@ -1,0 +1,9 @@
+pm4py
+pandas>=0.24.0
+cython
+scikit-learn
+numpy>=1.14
+matplotlib==2.2.2
+nltk
+tables
+numba
