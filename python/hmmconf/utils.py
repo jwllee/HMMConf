@@ -3,6 +3,20 @@ from scipy.special import logsumexp
 import numpy as np
 
 
+__all__ = [
+    'make_logger',
+    'assert_bounded',
+    'assert_no_negatives',
+    'assert_shape',
+    'assert_ndim',
+    'normalize',
+    'log_normalize',
+    'exp_log_normalize',
+    'iter_from_X_lengths',
+    'log_mask_zero'
+]
+
+
 np.set_printoptions(precision=10)
 
 
@@ -25,7 +39,7 @@ logging.config.dictConfig({
     },
     'handlers': {
         'default': {
-            'level': 'INFO',
+            'level': 'DEBUG',
             'class': 'logging.StreamHandler',
             'formatter': 'standard'
         },
@@ -87,6 +101,16 @@ def assert_shape(name, expected, actual):
     assert expected == actual, msg
 
 
+def assert_ndim(name, expected, actual):
+    msg = 'Dimension difference in {name}\n'
+    msg += '[expected]: {expected}\n'
+    msg += '[actual]:   {actual}\n'
+    msg = msg.format(name=name,
+                     expected=expected,
+                     actual=actual)
+    assert expected == actual, msg
+
+
 def make_logger(name):
     return logging.getLogger(name)
 
@@ -126,9 +150,10 @@ def log_normalize(a, axis=None):
     :param axis: dimension along which normalization is to be performed
     """
     with np.errstate(under="ignore"):
-        a_lse = logsumexp(a, axis)[:,np.newaxis]
-        # print('a: {}'.format(a))
-        # print('logsumexp: {}'.format(a_lse))
+        # a_lse = logsumexp(a, axis)[:,np.newaxis]
+        a_lse = logsumexp(a, axis)
+        if isinstance(a_lse, np.ndarray):
+            a_lse = a_lse[:,np.newaxis]
     # a -= a_lse[:, np.newaxis]
     # avoid zero division
     to_update = a_lse != -np.inf

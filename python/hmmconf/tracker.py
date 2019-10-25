@@ -4,13 +4,18 @@ from datetime import datetime as dt
 from collections import deque
 from scipy.special import logsumexp
 
-from . import base, utils
+
+from hmmconf.utils import *
+from hmmconf.base import *
 
 
 __all__ = [
     'ConformanceStatus',
     'ConformanceTracker'
 ]
+
+
+logger = make_logger('tracker.py')
 
 
 class ConformanceStatus:
@@ -30,87 +35,76 @@ class ConformanceStatus:
     :param activity_history list: list of previous activity for the case
     :param n_events int: number of events in case
     """
-    # @todo: add last distance
-    def __init__(self, startprob, int2state, int2obs, max_history=1):
-        self.startprob = startprob
-        self.logfwd = utils.log_mask_zero(startprob)
-        self.state_est = startprob
-        self.int2state = int2state
-        self.int2obs = int2obs
-        self.last_update = None
-        self.max_history = max_history
-        self.completeness_history = deque(maxlen=max_history)
-        self.conformance_history = deque(maxlen=max_history)
-        self.activity_history = deque(maxlen=max_history)
-        self.inc_dist_history = deque(maxlen=max_history)
-        self.mode_dist_history = deque(maxlen=max_history)
-        self.state_est_history = deque(maxlen=max_history)
-        self.exp_completeness_history = deque(maxlen=max_history)
-        self.mode_completeness_history = deque(maxlen=max_history)
-        self.sum_dist = 0.
-        self.sum_mode_dist = 0.
+    def __init__(self, caseid):
+        self.caseid = caseid
         self.n_events = 0
+        self.last_update = None
+        self.last_event = None
+        self.last_logfwd = None
+        self.last_emitconf = None
+        self.last_stateconf = None
+        self.last_finalconf = None
+        self.last_exception = None
+        self.observers = list()
 
-    @property
-    def most_likely_state(self):
-        """Most likely state according to the current state estimation, i.e., mode of the categorical distribution
-        """
-        return self.int2state[np.argmax(self.state_est, axis=1)[0]]
+    def __repr__(self):
+        repr_ = 'ConformanceStatus({caseid}, {n_events}, {logfwd})'
+        repr_ = repr_.format(caseid=self.caseid, n_events=self.n_events, logfwd=self.last_logfwd)
+        return repr_
 
-    @property
-    def likelihood_mode(self):
-        return np.max(self.state_est)
+    def __str__(self):
+        fwd = np.exp(self.last_logfwd)
+        str_  = 'Conformance status of {caseid} after {n_events} events:\n'
+        str_ += 'last update:    {update}\n'
+        str_ += 'last event:     {event}\n'
+        str_ += 'last fwd:     \n{fwd}\n'
+        str_ += 'last emitconf:  {emitconf}\n'
+        str_ += 'last stateconf: {stateconf}\n'
+        str_ += 'last finalconf: {finalconf}\n'
+        str_ += 'last exception: {exception}\n'
+        str_ = str_.format(
+            caseid=self.caseid,
+            n_events=self.n_events,
+            update=self.last_update,
+            event=self.last_event,
+            fwd=fwd,
+            emitconf=self.last_emitconf,
+            stateconf=self.last_stateconf,
+            finalconf=self.last_finalconf,
+            exception=self.last_exception)
+        return str_
 
-    @property
-    def last_activity(self):
-        """Most recent activity related to the case.
-        """
-        return self.activity_history[-1] if len(self.activity_history) > 0 else None
+    #------------------------------------------------------------
+    # Observer pattern
+    #------------------------------------------------------------
+    def register_observer(self, obs):
+        self.observers.append(obs)
+    
+    def remove_observer(self, obs):
+        self.observers.remove(obs)
 
-    @property
-    def exp_completeness(self):
-        return self.exp_completeness_history[-1] 
+    def notify_observers(self):
+        # info_msg = 'Notifying observers of status for case {} on event {}, observers: {}'
+        # info_msg = info_msg.format(self.caseid, self.last_event, self.observers)
+        # logger.info(info_msg)
 
-    @property
-    def mode_completeness(self):
-        return self.mode_completeness_history[-1]
+        for obs in self.observers:
+            obs.update(self)
 
-    def __compute_completeness(self, n_events, n_injections):
-        return 1 - (n_injections / (n_injections + n_events))
-
-    def update(self, act, logfwd, conf_arr, complete, inc_dist, mode_inc_dist):
-        """Updates the conformance status of the case.
-
-        :param act int: current activity of the case
-        :param logfwd array_like: updated log forward probability following the current activity
-        :param conf_arr array_like: conformance array for the current activity
-        :param complete float: completenss compared with the initial marking
-        :param inc_dist float: expected incremental distance
-        :param mode_inc_dist float: incremental distance between most likely states from time t and t - 1
-        """
+    def update(self, event, logfwd, emitconf, stateconf, finalconf, exception):
         self.n_events += 1
-        self.logfwd = logfwd.copy()
-        self.state_est = logfwd.copy()
-        utils.exp_log_normalize(self.state_est, axis=1)
-
         self.last_update = dt.now()
-        self.state_est_history.append(self.state_est)
-        self.activity_history.append(act)
-        self.conformance_history.append(conf_arr)
-        self.completeness_history.append(complete)
-        self.inc_dist_history.append(inc_dist)
-        self.mode_dist_history.append(mode_inc_dist)
-        self.sum_dist += max(0, inc_dist - 1)
-        self.sum_mode_dist += max(0, mode_inc_dist - 1)
-        exp_complete = self.__compute_completeness(self.n_events, self.sum_dist)
-        mode_complete = self.__compute_completeness(self.n_events, self.sum_mode_dist)
-        self.exp_completeness_history.append(exp_complete)
-        self.mode_completeness_history.append(mode_complete)
+        self.last_logfwd = logfwd
+        self.last_event = event
+        self.last_emitconf = emitconf
+        self.last_stateconf = stateconf
+        self.last_finalconf = finalconf
+        self.last_exception = exception
+        self.notify_observers()
 
 
 class ConformanceTracker(dict):
     """Online conformance tracker for event stream. Follows the API of https://svn.win.tue.nl/trac/prom/browser/Packages/StreamConformance. 
-
     **Parameters**:
     :param hmm: modified HMM for conformance checking
     :param max_n_case int: maximum number of cases to keep track of
@@ -119,63 +113,40 @@ class ConformanceTracker(dict):
     :param caseid_history: queue that puts caseids with the most recent event first
     :param logger: logger
     """
-
-    def __init__(self, hmm, max_n_case=10000):
+    def __init__(self, hmm, max_n_case=10000, observers=[]):
         self.hmm = hmm
         self.max_n_case = max_n_case
         self.caseid_history = deque(maxlen=max_n_case)
-        self.logger = utils.make_logger(self.__class__.__name__)
-
-    def __compute_completeness_from_init(self, n_events, logfwd):
-        initstate = self.hmm.startprob
-        dist_from_initstate = self.hmm.compute_distance_from_initstate(initstate, logfwd)
-        complete = (n_events + 1) / (dist_from_initstate + 1)
-        complete = min(1., complete)
-        return complete
-
-    def __compute_mode_dist(self, logfwd, prev_logfwd):
-        most_likely_state = np.argmax(logfwd)
-        prev_most_likely_state = np.argmax(self.hmm.startprob) if prev_logfwd is None else np.argmax(prev_logfwd)
-        mode_dist = self.hmm.distmat[prev_most_likely_state,most_likely_state]
-        return mode_dist
+        self.logger = make_logger(ConformanceTracker.__name__)
+        self.observers = observers
 
     def replay_event(self, caseid, event):
-        """Replays event of caseid.
+        prev_obs, prev_logfwd = None, None
 
-        :param caseid str: caseid 
-        :param event int: event
-        :return: conformance array, mode of state estimation
-        """
         if caseid in self:
             status = self[caseid]
-            prev_obs = status.last_activity
-            prev_logfwd = status.logfwd
+            prev_obs = status.last_event
+            prev_logfwd = status.last_logfwd
             self.caseid_history.remove(caseid)
         else:
-            if (len(self.caseid_history) >= self.max_n_case):
+            if len(self.caseid_history) >= self.max_n_case:
                 to_remove = self.caseid_history.popleft()
                 del self[to_remove]
-            status = ConformanceStatus(self.hmm.startprob, 
-                                       self.hmm.int2state, 
-                                       self.hmm.int2obs)
+            status = ConformanceStatus(caseid)
+
+            # register observers of status
+            for obs in self.observers:
+                status.register_observer(obs)
+
             self[caseid] = status
-            prev_obs, prev_logfwd = None, None
 
-        logfwd, conf_arr, is_exception = self.hmm.forward(event, prev_obs, prev_logfwd)
-        exp_inc_dist = self.hmm.compute_expected_inc_distance(event, logfwd,
-                                                              prev_obs, prev_logfwd)
-        mode_dist = self.__compute_mode_dist(logfwd, prev_logfwd)
-        complete = self.__compute_completeness_from_init(status.n_events, logfwd)
+        results = self.hmm.compute_logfwd(event, prev_obs, prev_logfwd)
+        logfwd = results[0]
+        emitconf = results[1]
+        stateconf = results[2]
+        finalconf = results[3]
+        exception = results[4]
 
-        status.update(event, logfwd, conf_arr, complete, exp_inc_dist, mode_dist)
+        status.update(event, logfwd, emitconf, stateconf, finalconf, exception)
         self.caseid_history.appendleft(caseid)
-        seq_likelihood = np.exp(logsumexp(logfwd.ravel()))
-
-        score = (conf_arr, status.most_likely_state,
-                 status.likelihood_mode, complete, 
-                 exp_inc_dist, mode_dist, 
-                 status.sum_dist, status.sum_mode_dist,
-                 status.exp_completeness, status.mode_completeness, 
-                 is_exception, seq_likelihood)
-
-        return score
+        return logfwd, finalconf, exception

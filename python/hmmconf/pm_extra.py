@@ -12,17 +12,22 @@ import matplotlib.patches as mpatches
 from pm4py.objects.transition_system import transition_system as ts
 from pm4py.objects.petri import semantics
 from pm4py.objects.petri import petrinet as petri
+from pm4py.visualization.petrinet import factory as vis_factory
+
+from hmmconf import utils
 
 
 __all__ = [
     'build_reachability_graph',
     'get_init_marking',
     'connect_inv_markings',
-    'collapse_inv_trans'
 ]
 
 
 MAX_RG_STATE = 1e6
+
+
+logger = utils.make_logger(__file__)
 
 
 # plt.switch_backend('TkAgg')
@@ -142,6 +147,38 @@ def get_init_marking(rg):
 
 
 def connect_inv_markings(rg, inv_states, is_inv):
+    """Connect markings that have a path of invisible transitions between them. This is
+    to account for the fact that in reality the markings will seem adjacent since 
+    invisible transition firings are not observable. The operation is performed in-place.
+
+    The connect forward approach is taken where we connect the previous visible transition
+    forward from the source node to the target node which have a path of invisible transitions
+    between them. For example,
+
+    m0 --t0--> m1 --inv1--> m2 --inv2--> m3 
+
+    will be transformed to
+
+    m0 --t0--> m1
+    m0 --t0--> m2
+    m0 --t0--> m3
+
+    since we would never observe the transition from m1 to m2 and m3 since they are connected
+    by invisible transitions.
+
+    Also, we need to account for the weights (probability mass) of the transitions that are 
+    being connected forward now to multiple markings. Here we just spread the weight uniformly
+    over all connected markings. For example,
+
+    m0 --t0(3)--> m1 --inv1--> m2 --inv2--> m3
+
+    will be transformed to
+
+    m0 --t0(1)-->m1
+    m0 --t0(1)-->m2
+    m0 --t0(1)-->m3
+
+    """
     init = get_init_marking(rg)
     node_q = [init] 
     visited = set()
@@ -196,61 +233,29 @@ def connect_inv_markings(rg, inv_states, is_inv):
             add_arc_from_to(name, from_state, to_state, rg, data)
 
 
-def collapse_inv_trans(rg, inv_states):
-    """Collapse transition edges in reachability graph that correspond to invisible transitions and modify the adjacent edge probability weight accordingly.
-
-    :param rg: reachability graph
-    :param inv_states array_like: ordered list of tuples (in_state, inv_tran, out_state) such that earlier elements are ones were explored first during the breadth-first search that created the reachability graph.
-    """
-    for _, inv_tran, _ in inv_states[::-1]:
-        in_state = inv_tran.from_state
-        out_state = inv_tran.to_state
-        # print('In state: {}'.format(in_state))
-        # print('Transition: {}'.format(inv_tran))
-        # print('Out state: {}'.format(out_state))
-        # connect all incoming arcs to in_state to out_state
-        inv_tran_weight = inv_tran.data['weight']
-        in_state.outgoing.remove(inv_tran)
-        out_state.incoming.remove(inv_tran)
-
-        for out_tran in out_state.outgoing:
-            # make new transition that connect in_state to out_tran.out_state
-            data = {'weight': out_tran.data['weight'] * inv_tran_weight}
-            add_arc_from_to(out_tran.name, in_state, out_tran.to_state, rg, data)
-
-        # remove out_state if it is no longer a reachable marking
-        if len(out_state.incoming) == 0:
-            rg.states.remove(out_state)
-            for out_tran in out_state.outgoing:
-                rg.transitions.remove(out_tran)
-                out_tran.to_state.incoming.remove(out_tran)
-
-        # remove in_state if it no longer has any outgoing arcs
-        if len(in_state.outgoing) == 0 and len(in_state.incoming) == 0:
-            rg.states.remove(in_state)
-
-        rg.transitions.remove(inv_tran)
+def find_transition(activity_label, transitions):
+    trans = []
+    for t in transitions:
+        if t.label == activity_label:
+            trans.append(t)
+    return trans
 
 
-def draw_undirected(G, node_map):
-    pos = nx.spring_layout(G)
-    
-    # nodes
-    node_color = 'lightblue'
-    nx.draw_networkx_nodes(G, pos, node_size=100, node_color=node_color)
+def has_invisible(trans_list, is_inv):
+    has = False
+    for t in trans_list:
+        if is_inv(t):
+            has = True
+            break
+    return has
 
-    # edges
-    edges = [(u, v) for (u, v, d) in G.edges(data=True)]
-    nx.draw_networkx_edges(G, pos, edgelist=edges, width=1)
-    nx.draw_networkx_labels(G, pos, font_size=10, font_family='sans-serif')
 
-    # create legend from node map
-    handles = list()
-    for key, val in node_map.items():
-        patch = mpatches.Patch(color=node_color, label='{}:{}'.format(key, val))
-        handles.append(patch)
-
-    plt.legend(handles=handles)
+def marking2str(marking, sep='_'):
+    multiset = [str(p.name) + sep + str(count) for p, count in marking.items()]
+    multiset = sorted(multiset)
+    marking_str = '_'.join(multiset)
+    # logger.info('marking multiset: {} to {}'.format(multiset, marking_str))
+    return marking_str
 
 
 if __name__ == '__main__':
@@ -334,6 +339,10 @@ if __name__ == '__main__':
 
     init_marking = petri.Marking([p0])
     final_marking = petri.Marking([p11])
+
+    out_fp = './net.dot'
+    gviz = vis_factory.apply(net, init_marking, final_marking)
+    gviz.save(out_fp)
 
     # out_fp = './test-net.pnml'
     # exporter.pnml.export_net(net, init_marking, out_fp, final_marking=final_marking)

@@ -10,7 +10,7 @@ requirements = [
 
 setup(
     name='hmmconf',
-    version='0.1.0',
+    version='2.0.0',
     description='HMM-based conformance checker',
     author='Wai Lam Jonathan Lee',
     author_email='walee@uc.cl',

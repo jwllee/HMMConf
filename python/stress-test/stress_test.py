@@ -1,20 +1,14 @@
 import numpy as np
 import pandas as pd
-import time, os, sys
+import time, os, argparse, sys
+import multiprocessing as mp
+from datetime import datetime
+from collections import defaultdict
 
 import hmmconf
+from hmmconf import metric, pm_extra
 from pm4py.objects.petri.importer import pnml as pnml_importer
-
-from itertools import chain
-from collections import deque
-
-
-MODEL_FP = os.path.join('..', '..', 'data', 'BPM2018', 'stress-test', 'model.pnml')
-DATA_FP = os.path.join('..', '..', 'data', 'BPM2018', 'stress-test', 'filtered-stream.csv')
-
-ACTIVITY = 'activity'
-ACTIVITY_ID = 'activity_id'
-CASEID = 'caseid'
+from pm4py.visualization.transition_system import util
 
 
 np.set_printoptions(precision=2)
@@ -23,12 +17,63 @@ np.set_printoptions(precision=2)
 logger = hmmconf.utils.make_logger(__file__)
 
 
-def import_data():
-    net, init_marking, final_marking = pnml_importer.import_net(MODEL_FP)
-    # print('Number of transitions: {}'.format(len(net.transitions)))
-    data_df = pd.read_csv(DATA_FP)
-    # print(data_df.head())
-    return net, init_marking, final_marking, data_df
+MODEL_FP = os.path.join('..', '..', 'data', 'BPM2018', 'stress-test', 'model.pnml')
+DATA_FP = os.path.join('..', '..', 'data', 'BPM2018', 'stress-test', 'filtered-stream.csv')
+RESULT_DIR = os.path.join('results')
+
+ACTIVITY = 'activity'
+ACTIVITY_ID = 'activity_id'
+CASEID = 'caseid'
+
+
+if not os.path.isdir(RESULT_DIR):
+    os.mkdir(RESULT_DIR)
+
+
+ACTIVITY = 'activity'
+ACTIVITY_ID = 'activity_id'
+CASEID = 'caseid'
+
+# EM params
+N_JOBS = 'n_jobs'
+N_ITER = 'n_iters'
+TOL = 'tol'
+RANDOM_SEED_PARAM = 'random_seed'
+N_FOLDS = 'n_folds'
+IS_TEST = 'is_test'
+CONF_TOL = 'conformance_tol'
+PRIOR_MULTIPLIER = 'prior_multiplier'
+EM_PARAMS = 'em_params'
+MAX_N_CASE = 'max_n_case'
+
+
+# experiment configurations
+EXPERIMENT_CONFIGS = {
+    N_JOBS: mp.cpu_count() - 1,
+    N_ITER: 30,
+    TOL: 5,
+    RANDOM_SEED_PARAM: 123,
+    N_FOLDS: 5,
+    IS_TEST: False,
+    CONF_TOL: 0,
+    PRIOR_MULTIPLIER: 1.,
+    EM_PARAMS: 'to',
+    MAX_N_CASE: 10000
+}
+
+
+def experiment_configs2df(configs):
+    items = sorted(list(configs.items()), key=lambda t: t[0])
+    columns, values = zip(*items)
+    return pd.DataFrame([values], columns=columns)
+
+
+def get_results_dirname(configs):
+    dt = datetime.now().strftime('%Y-%m-%d_%H-%M-%S-%f')
+    configs_str = ['{}_{}'.format(k, v) for k, v in configs.items()]
+    configs_str = '-'.join(configs_str)
+    dirname = '{}-{}'.format(dt, configs_str)
+    return dirname
 
 
 def map_net_activity(net, actmap):
@@ -42,84 +87,69 @@ def modify_place_name(net):
     markings back and forth to its integer representation.
     """
     for p in net.places:
-        p.name = 'p' + p.name
+        p.name = p.name
 
 
-def process_net(net, init_marking, final_marking):
-    is_inv = lambda t: t.label is None
-    inv_trans = list(filter(is_inv, net.transitions))
-    # print('Number of invisible transitions: {}'.format(len(inv_trans)))
-    rg, inv_states = hmmconf.build_reachability_graph(net, init_marking, is_inv)
-    is_inv = lambda t: t.name is None
-    hmmconf.connect_inv_markings(rg, inv_states, is_inv)
-    return rg
+def estimate_conform_params(event_df, state2int, obs2int, 
+                            net, init_marking, final_marking,
+                            is_inv, add_prior=True, multiplier=1.):
+    # group cases
+    grouped_by_caseid = event_df.groupby('caseid')
+    cases = list()
 
+    for caseid, case_df in grouped_by_caseid:
+        case = case_df['activity']
+        cases.append((caseid, case))
 
-def setup_hmm(rg):
-    G, node_map = hmmconf.rg_to_nx_undirected(rg, map_nodes=True)
-    n_states = len(node_map)
+    results = hmmconf.get_counts_from_log(
+        cases, state2int, obs2int,
+        net, init_marking, final_marking, is_inv
+    )
+    trans_count, emit_count, conforming_cid = results
 
-    is_inv = lambda t: t.name is None
-    startprob = hmmconf.compute_startprob(rg, node_map, n_states, is_inv)
+    # get pseudo counts
+    if add_prior:
+        is_inv_rg = lambda t: t.name is None
+        rg, inv_states = hmmconf.build_reachability_graph(net, init_marking, is_inv)
+        init = pm_extra.get_init_marking(rg)
+        trans_pseudo_count = hmmconf.get_pseudo_counts_transcube(rg, init, 
+                                                                 is_inv_rg, 
+                                                                 state2int, obs2int, multiplier)
+        emit_pseudo_count = hmmconf.get_pseudo_counts_emitmat(rg, init, 
+                                                              is_inv_rg, 
+                                                              state2int, obs2int, multiplier)
 
-    # remove invisible transitions 
-    to_remove = list()
-    for t in rg.transitions:
-        if is_inv(t):
-            to_remove.append(t)
-
-    for t in to_remove:
-        rg.transitions.remove(t)
-        t.from_state.outgoing.remove(t)
-        t.to_state.incoming.remove(t)
-
-    dist_df = hmmconf.compute_distance_matrix(G, node_map, as_dataframe=True)
-    distmat = dist_df.values
-    # print('Distance df: \n{}'.format(dist_df))
-
-    obsmap = {t.name: int(t.name) for t in rg.transitions}
-    int2state = {val:key for key, val in node_map.items()}
-    int2obs = {val:key for key, val in obsmap.items()}
-    n_obs = len(obsmap)
-
-    logger.info('No. of states: {}'.format(n_states))
-
-    transcube = hmmconf.compute_state_trans_cube(rg, node_map, obsmap, n_obs, n_states)
-    emitmat = hmmconf.compute_emission_mat(rg, node_map, obsmap, n_obs, n_states)
-    confmat = hmmconf.compute_conformance_mat(emitmat)
-    # startprob += 1e-1
-    # utils.normalize(startprob, axis=1)
-    # startprob = np.zeros((1, n_states)) + 1. / n_states
-    # utils.assert_bounded('startprob', np.sum(startprob).ravel()[0], 0., 1.)
-    conform_f = hmmconf.conform
-
-    hmm = hmmconf.HMMConf(conform_f, startprob, transcube, emitmat, confmat, distmat, 
-                       int2state, int2obs, n_states, n_obs, 
-                       params='to', verbose=True, n_jobs=7)
-    return hmm
-
-
-def make_conformance_tracker(hmm):
-    return hmmconf.ConformanceTracker(hmm, max_n_case=10000)
+        transcube = hmmconf.estimate_transcube(trans_count, trans_pseudo_count)
+        emitmat = hmmconf.estimate_emitmat(emit_count, emit_pseudo_count)
+    else:
+        transcube = hmmconf.estimate_transcube(trans_count)
+        emitmat = hmmconf.estimate_emitmat(emit_count)
+        
+    return transcube, emitmat, conforming_cid
 
 
 def event_df_to_hmm_format(df):
-    lengths = df.groupby(CASEID).count()[ACTIVITY_ID].values
-    X = df[[ACTIVITY_ID]].values
+    lengths = df.groupby('caseid').count()['activity_id'].values
+    X = df[['activity_id']].values
     return X, lengths
+
+
+def sizeof_status(s):
+    size_obj = sys.getsizeof(s)
+    size_obj += (s.last_logfwd.size * s.last_logfwd.itemsize)
+    return size_obj
 
 
 def sizeof_hmm(hmm):
     assert isinstance(hmm, hmmconf.HMMConf)
     size_obj = sys.getsizeof(hmm)
     _bytes = 0
-    _bytes += hmm.startprob.nbytes
-    _bytes += hmm.transcube.nbytes
-    _bytes += hmm.transcube_d.nbytes
-    _bytes += hmm.emitmat.nbytes
-    _bytes += hmm.emitmat_d.nbytes
+    _bytes += hmm.logstartprob.nbytes
+    _bytes += hmm.logtranscube.nbytes
+    _bytes += hmm.logtranscube_d.nbytes
+    _bytes += hmm.logemitmat.nbytes
+    _bytes += hmm.logemitmat_d.nbytes
     _bytes += hmm.confmat.nbytes
-    _bytes += hmm.distmat.nbytes
     # print('numpy array size: {}MB'.format(_bytes))
     size_obj += _bytes
 
@@ -142,59 +172,9 @@ def sizeof_hmm(hmm):
     return size_obj
 
 
-def sizeof_status(s):
-    size_obj = sys.getsizeof(s)
-    size_obj += (s.startprob.size * s.startprob.itemsize)
-    size_obj += (s.logfwd.size * s.logfwd.itemsize)
-    size_obj += (s.state_est.size * s.state_est.itemsize)
-    size_obj += sys.getsizeof(s.max_history)
-    size_obj += sys.getsizeof(s.last_update)
-    size_obj += sys.getsizeof(s.sum_dist)
-    size_obj += sys.getsizeof(s.sum_mode_dist)
-    size_obj += sys.getsizeof(s.n_events)
-    size_obj += sys.getsizeof(s.sum_dist)
-    size_obj += sys.getsizeof(s.sum_mode_dist)
-    size_obj += sys.getsizeof(s.n_events)
-
-    for key, val in hmm.int2obs.items():
-        size_obj += sys.getsizeof(key)
-        size_obj += sys.getsizeof(val)
-
-    for key, val in hmm.int2state.items():
-        size_obj += sys.getsizeof(key)
-        size_obj += sys.getsizeof(val)
-
-    for v in s.completeness_history:
-        size_obj += sys.getsizeof(v)
-
-    for v in s.conformance_history:
-        size_obj += (v.size * v.itemsize)
-
-    for v in s.activity_history:
-        size_obj += sys.getsizeof(v)
-
-    for v in s.inc_dist_history:
-        size_obj += (v.size * v.itemsize)
-
-    for v in s.mode_dist_history:
-        size_obj += sys.getsizeof(v)
-
-    for v in s.state_est_history:
-        size_obj += (v.size * v.itemsize)
-
-    for v in s.exp_completeness_history:
-        size_obj += sys.getsizeof(v)
-
-    for v in s.mode_completeness_history:
-        size_obj += sys.getsizeof(v)
-
-    return size_obj
-
-
-# Follows https://docs.python.org/3/library/sys.html
 def sizeof_tracker(t):
     assert isinstance(t, hmmconf.ConformanceTracker)
-    size_obj = sys.getsizeof(t) 
+    size_obj = sys.getsizeof(t)
     # avoid double counting
     size_obj -= sys.getsizeof(t.hmm) 
     size_obj += sizeof_hmm(t.hmm)
@@ -215,43 +195,79 @@ if __name__ == '__main__':
     print('Start stress test...')
     start = time.time()
 
+    configs_df = experiment_configs2df(EXPERIMENT_CONFIGS)
+    info_msg = 'Experiment configuration: \n{}'.format(configs_df)
+    logger.info(info_msg)
+
+    results_dirname = get_results_dirname(EXPERIMENT_CONFIGS)
+    results_dir = os.path.join(RESULT_DIR, results_dirname)
+    os.mkdir(results_dir)
+
     print('Importing data...')
-    net, init_marking, final_marking, data_df = import_data()
+    net, init_marking, final_marking = pnml_importer.import_net(MODEL_FP)
+    net_orig, init_marking_orig, final_marking_orig = pnml_importer.import_net(MODEL_FP)
+    log_df = pd.read_csv(DATA_FP)
 
     print('Mapping activity to integer labels...')
-    actmap = data_df[[ACTIVITY, ACTIVITY_ID]].set_index(ACTIVITY).to_dict()[ACTIVITY_ID]
-    rev_actmap = {key:val for key, val in actmap.items()}
-    map_net_activity(net, actmap)
+    obs2int = log_df[[ACTIVITY, ACTIVITY_ID]].set_index(ACTIVITY)
+    obs2int = obs2int.to_dict()[ACTIVITY_ID]
+    int2obs = {key:val for key, val in obs2int.items()}
+    obs2int_df = pd.DataFrame(list(obs2int.items()), columns=['activity', 'activity_int'])
+    info_msg = 'Activity 2 int dataframe: \n{}'.format(obs2int_df)
+    logger.info(info_msg)
+    map_net_activity(net, obs2int)
 
-    print('Modify place names...')
+    logger.info('Modify place names...')
     modify_place_name(net)
 
-    print('Process net...')
-    rg = process_net(net, init_marking, final_marking)
+    if EXPERIMENT_CONFIGS[IS_TEST]:
+        caseids = log_df[CASEID].unique()[-100:]
+        to_include = log_df[CASEID].isin(caseids)
+        n_cases = len(caseids)
+        logger.info('Small test on {} cases'.format(n_cases))
+        filtered_df = log_df.loc[to_include,:]
+    else:
+        filtered_df = log_df
 
-    print('Setting up HMM...')
-    hmm = setup_hmm(rg)
+    print('Setting up HMM...') 
+    is_inv = lambda t: t.label is None
+    rg, inv_states = hmmconf.build_reachability_graph(net, init_marking, is_inv)
+    sorted_states = sorted(list(rg.states), key=lambda s: (s.data['disc'], s.name))
+    node_map = {key:val for val, key in enumerate(map(lambda state: state.name, sorted_states))}
+    int2state = {val:key for key, val in node_map.items()}
+    state2int = {val:key for key, val in int2state.items()}
 
-    caseids = data_df[CASEID].unique()[-100:]
-    to_include = data_df[CASEID].isin(caseids)
-    # caseids = ['case_34'] # warm start example
-    # caseids = data_df[CASEID].unique()[:100]
-    # n_cases = len(caseids)
-    # em_to_include = data_df[CASEID].isin(caseids)
+    is_inv_rg = lambda t: t.name is None
+    init = hmmconf.get_init_marking(rg)
+    startprob = hmmconf.compute_startprob(rg, state2int, is_inv_rg)
+    conf_obsmap = {i:i for i in obs2int.values()}
+    confmat = hmmconf.compute_confmat(rg, init, is_inv_rg, state2int, conf_obsmap)
 
-    filtered_df = data_df
-    # em_filtered_df = data_df.loc[em_to_include,:]
+    params = estimate_conform_params(
+        filtered_df, state2int, obs2int, net_orig, init_marking_orig, final_marking_orig, is_inv
+    )
+    transcube, emitmat, conforming_caseid = params
+    hmmconf_params = {
+        'params': EXPERIMENT_CONFIGS[EM_PARAMS],
+        'conf_tol': EXPERIMENT_CONFIGS[CONF_TOL],
+        'n_iter': EXPERIMENT_CONFIGS[N_ITER],
+        'tol': EXPERIMENT_CONFIGS[TOL],
+        'verbose': True,
+        'n_procs': EXPERIMENT_CONFIGS[N_JOBS],
+        'random_seed': EXPERIMENT_CONFIGS[RANDOM_SEED_PARAM]
+    }
+    hmm = hmmconf.HMMConf(startprob, transcube, emitmat, confmat, int2state,
+                        int2obs, **hmmconf_params)
 
-    print('data df shape: {}'.format(filtered_df.shape))
-
-    # EM training
-    # print('EMing...')
-    # X, lengths = event_df_to_hmm_format(em_filtered_df)
-    # fit_start = time.time()
-    # tracker.hmm.fit(X, lengths)
-    # fit_end = time.time()
-    # fit_took = fit_end - fit_start
-    # logger.info('Training {} cases took: {:.2f}s'.format(n_cases, fit_took))
+    int2state_list = list(int2state.items())
+    stateid_list, state_list = zip(*int2state_list)
+    columns = ['state_id', 'state']
+    state_id_df = pd.DataFrame({
+        'state_id': stateid_list,
+        'state': state_list
+    })
+    info_msg = 'State id df: \n{}'.format(state_id_df)
+    logger.info(info_msg)
 
     time_cols = [
         'event', 'n_cases', 'total time', 
@@ -266,12 +282,12 @@ if __name__ == '__main__':
     # memory test
     print('Doing memory test...')
     print('Make conformance tracker...')
-    _tracker = make_conformance_tracker(hmm)
+    tracker = hmmconf.ConformanceTracker(hmm, max_n_case=EXPERIMENT_CONFIGS[MAX_N_CASE])
 
-    print('Tracker size: {:.0f}MB'.format(sizeof_tracker_mb(_tracker)))
+    print('Tracker size: {:.0f}MB'.format(sizeof_tracker_mb(tracker)))
 
     mem_lines = list()
-    mem_lines.append((0, 0, sizeof_tracker_mb(_tracker)))
+    mem_lines.append((0, 0, sizeof_tracker_mb(tracker)))
 
     total_events = 0
     
@@ -281,21 +297,21 @@ if __name__ == '__main__':
         act = row.activity
 
         # start_i = time.time()
-        score = _tracker.replay_event(caseid, event)
+        result = tracker.replay_event(caseid, event)
         # end_i = time.time()
         # print('Took {:.3f}s'.format(end_i - start_i))
 
         total_events += 1
 
         if total_events % 10000 == 0:
-            size_tracker = sizeof_tracker_mb(_tracker)
-            n_cases = len(_tracker)
+            sizetracker = sizeof_tracker_mb(tracker)
+            n_cases = len(tracker)
             msg = 'Total events: {}, ' \
                   'Number of cases: {}, ' \
-                  'Memory: {:.2f}MB'.format(total_events, n_cases, size_tracker)
+                  'Memory: {:.2f}MB'.format(total_events, n_cases, sizetracker)
             print(msg)
             # start_i = time.time()
-            line_i = (total_events, n_cases, size_tracker)
+            line_i = (total_events, n_cases, sizetracker)
             # end_i = time.time()
             # print('took {:.2f}s to count mem'.format(end_i - start_i))
             mem_lines.append(line_i)
@@ -309,14 +325,14 @@ if __name__ == '__main__':
 
     print('Doing time test...')
     print('Make conformance tracker...')
-    _tracker = make_conformance_tracker(hmm)
+    tracker = hmmconf.ConformanceTracker(hmm, max_n_case=EXPERIMENT_CONFIGS[MAX_N_CASE])
     for row in filtered_df.itertuples(index=False):
         caseid = row.caseid
         event = row.activity_id
         act = row.activity
 
         start_i = time.time()
-        score = _tracker.replay_event(caseid, event)
+        result = tracker.replay_event(caseid, event)
         end_i = time.time()
 
         total_time += ((end_i - start_i) * 1000)
@@ -324,7 +340,7 @@ if __name__ == '__main__':
         total_events += 1
 
         if total_events % 10000 == 0:
-            n_cases = len(_tracker)
+            n_cases = len(tracker)
             avg_time = total_time / total_events
             local_avg = local_avg / 10000
             msg = 'Total events: {}, ' \
@@ -341,7 +357,8 @@ if __name__ == '__main__':
     mem_df = pd.DataFrame.from_records(mem_lines, columns=mem_cols)
     time_df = pd.DataFrame.from_records(time_lines, columns=time_cols)
 
-    out_fp = 'results-stress-test.csv'
+    out_fname = 'results-stress-test.csv'
+    out_fp = os.path.join(results_dir, out_fname)
     df = pd.merge(time_df, mem_df, on=['event', 'n_cases'])
     err_msg = 'Merged results dataframe ({}) does not have the same number of rows as mem_df ({}) and time_df ({})'
     err_msg = err_msg.format(df.shape[0], mem_df.shape[0], time_df.shape[0])
