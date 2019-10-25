@@ -1,7 +1,8 @@
 DIR=$(shell pwd)
+JAVA_INSTALLER_FP=./jdk-installer.tar.gz
 
 build:
-	docker build --tag=eclipse:2019-03 .
+	docker build --tag=eclipse:2019-03 --build-arg JAVA_INSTALLER_FP=$(JAVA_INSTALLER_FP) .
 
 run: build
 	mkdir -p .eclipse-docker
