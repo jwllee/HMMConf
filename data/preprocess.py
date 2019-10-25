@@ -16,13 +16,13 @@ if __name__ == '__main__':
 
         print('Processing {}'.format(fp))
         df = pd.read_csv(fp, sep='\t')
-        print('df shape: {}'.format(df.shape))
-        print('Head: \n{}'.format(df.head()))
+        # print('df shape: {}'.format(df.shape))
+        # print('Head: \n{}'.format(df.head()))
 
         n_cases = df['T:concept:name'].unique().shape[0]
         case_length_stats = df[['T:concept:name', 'id']].groupby('T:concept:name').count().describe()
-        print('No. of cases: {}'.format(n_cases))
-        print('Case length stats: \n{}'.format(case_length_stats))
+        # print('No. of cases: {}'.format(n_cases))
+        # print('Case length stats: \n{}'.format(case_length_stats))
 
         # rename
         df.columns = ['caseid', 'activity', 'id']
