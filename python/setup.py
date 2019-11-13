@@ -4,7 +4,10 @@ from setuptools import find_packages, setup
 
 
 requirements = [
-
+    'numpy',
+    'numba',
+    'icc_rt',
+    'pm4py',
 ]
 
 
