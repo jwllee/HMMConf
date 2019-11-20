@@ -1,0 +1,3 @@
+[submodule "HMMConf-demo"]
+	path = HMMConf-demo
+	url = https://github.com/jwllee/HMMConf-demo.git
