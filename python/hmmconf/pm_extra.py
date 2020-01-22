@@ -103,7 +103,7 @@ def build_reachability_graph(net, init_marking, is_inv, staterep=default_statere
     mark_to_state[init_marking] = init_state
 
     while mark_queue and len(rg.states) < MAX_RG_STATE:
-        cur_mark = mark_queue.pop()
+        cur_mark = mark_queue.pop(0)
         cur_state = mark_to_state[cur_mark]
         enabled_trans = list(semantics.enabled_transitions(net, cur_mark))
 
