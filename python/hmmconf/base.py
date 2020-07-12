@@ -1,5 +1,6 @@
 import numpy as np
 import multiprocessing as mp
+from multiprocessing import get_context
 from numba import njit, prange
 
 from hmmconf.conform import *
@@ -490,9 +491,11 @@ def fit_multiprocess(X, lengths, params, logtranscube, logtranscube_d,
         logprob, stats = fit_worker(args_list[0])
         results = [(logprob, stats)]
     else:
-        pool = mp.Pool(processes=n_procs)
-        results = pool.map(fit_worker, args_list)
-        pool.close()
+        # pool = mp.Pool(processes=n_procs)
+        # multiprocessing fork problem: https://pythonspeed.com/articles/python-multiprocessing/
+        with get_context("spawn").Pool() as pool:
+            results = pool.map(fit_worker, args_list)
+            pool.close()
 
     return results
 
