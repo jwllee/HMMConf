@@ -41,6 +41,7 @@ CONF_TOL = 'conformance_tol'
 PRIOR_MULTIPLIER = 'prior_multiplier'
 EM_PARAMS = 'em_params'
 MAX_N_CASE = 'max_n_case'
+ADD_PRIOR = 'add_prior'
 
 
 # experiment configurations
@@ -52,6 +53,7 @@ EXPERIMENT_CONFIGS = {
     N_FOLDS: 5,
     IS_TEST: False,
     CONF_TOL: 0,
+    ADD_PRIOR: True,
     PRIOR_MULTIPLIER: 1.,
     EM_PARAMS: 'to',
     MAX_N_CASE: 10000
@@ -310,7 +312,10 @@ if __name__ == '__main__':
             confmat = hmmconf.compute_confmat(rg, init, is_inv_rg, state2int, conf_obsmap)
 
             params = estimate_conform_params(
-                train_event_df, state2int, obs2int, net_orig, init_marking_orig, final_marking_orig, is_inv
+                train_event_df, state2int, obs2int,
+                net_orig, init_marking_orig, final_marking_orig, is_inv,
+                add_prior=EXPERIMENT_CONFIGS[ADD_PRIOR],
+                multiplier=EXPERIMENT_CONFIGS[PRIOR_MULTIPLIER],
             )
             transcube, emitmat, conforming_caseid = params
             hmmconf_params = {
