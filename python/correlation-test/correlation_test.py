@@ -485,6 +485,10 @@ if __name__ == '__main__':
             store[test_df_name] = test_results_df
 
         store.close()
-        end_all = time.time()
-        took_all = (end_all - start_all) / 60
-        logger.info('Took: {:.3f} mins'.format(took_all))
+        end_net = time.time()
+        took_net = (end_net - start_net) / 60
+        logger.info("Net {!s} took: {:.3f} mins".format(net_fname, took_net))
+
+    end_all = time.time()
+    took_all = (end_all - start_all) / 60
+    logger.info('Took: {:.3f} mins'.format(took_all))
