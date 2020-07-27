@@ -1,3 +1,4 @@
+import random
 import numpy as np
 import pandas as pd
 import time, os, argparse
@@ -57,7 +58,7 @@ EXPERIMENT_CONFIGS = {
     N_ITER: 10,
     TOL: 5,
     RANDOM_SEED_PARAM: 123,
-    IS_TEST: False,
+    IS_TEST: True,
     CONF_TOL: 0,
     ADD_PRIOR: True,
     PRIOR_MULTIPLIER: 1.,
@@ -181,7 +182,9 @@ if __name__ == '__main__':
     map_net_activity(net, obs2int)
 
     if EXPERIMENT_CONFIGS[IS_TEST]:
-        caseids = event_df[CASEID].unique()[-10:]
+        caseids = event_df[CASEID].unique().tolist()
+        random.seed(EXPERIMENT_CONFIGS[RANDOM_SEED_PARAM])
+        caseids = random.choices(caseids, k=1000)
         to_include = event_df[CASEID].isin(caseids)
         n_cases = len(caseids)
         logger.info(f"Small test on {n_cases} cases")
