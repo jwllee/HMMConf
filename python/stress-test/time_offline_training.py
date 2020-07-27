@@ -20,7 +20,7 @@ RESULT_DIR = os.path.join('results', 'time-offline-training')
 
 
 if not os.path.isdir(RESULT_DIR):
-    os.mkdir(RESULT_DIR)
+    os.makedirs(RESULT_DIR)
 
 
 ACTIVITY = 'activity'
