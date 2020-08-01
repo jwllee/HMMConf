@@ -1,0 +1,26 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+_usage() {
+	echo "installing Python requirements"
+	echo "	pipi	without arguments: installs packages defined in requirements.txt and requirements-local.txt"
+	echo " 			with arguments:    installs given requirement"
+	exit 1
+}
+
+# show usage if no argument is given
+arg=${1:-}
+shift || _usage
+
+case ${arg} in
+	pipi)
+		if [ $# -gt 0 ]; then
+			pip install --no-warn-script-location --disable-pip-version-check --no-cache-dir --src=/opt/hmmconf/src --user --upgrade "$@"
+		else
+			pip install --no-warn-script-location --disable-pip-version-check --no-cache-dir --src=/opt/hmmconf/src --user --upgrade -r /opt/hmmconf/workspace/requirements.txt
+			if [[ -f /opt/hmmconf/workspace/requirements-local.txt ]]; then
+				pip install --no-warn-script-location --disable-pip-version-check --no-cache-dir --src=/opt/hmmconf/src --user --upgrade -r /opt/hmmconf/workspace/requirements-local.txt
+			fi
+		fi
+		;;
+esac
