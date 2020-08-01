@@ -34,7 +34,8 @@ logging.config.dictConfig({
             'format': '%(asctime)s [%(levelname)s] %(name)s: %(message)s'
         },
         FORMAT_MINIMAL: {
-            'format': '%(message)s'
+            'format': '%(asctime)s [%(levelname)s]: %(message)s',
+            'datefmt': '%b %d %Y %H:%M',
         }
     },
     'handlers': {
@@ -50,15 +51,15 @@ logging.config.dictConfig({
         },
     },
     'loggers': {
-        '': {
-            'handlers': ['default'],
-            'level': 'INFO',
-            'propagate': True
-        },
         LOGGER_MINIMAL: {
             'handlers': [HANDLER_MINIMAL],
             'level': 'DEBUG',
             'propagate': True
+        },
+        "time_offline_training.py": {
+            'handlers': [HANDLER_MINIMAL],
+            'level': 'DEBUG',
+            'propagate': True,
         },
     }
 })
