@@ -18,5 +18,5 @@ setup(
     author='Wai Lam Jonathan Lee',
     author_email='walee@uc.cl',
     install_requires=requirements,
-    packages=find_packages('.')
+    packages=find_packages(include=['hmmconf', 'hmmconf.*']),
 )
