@@ -1,0 +1,26 @@
+version: "2.3"
+services:
+  workspace:
+    image: jwllee/hmmconf:latest
+    depends_on:
+      - jupyter
+    volumes:
+      - $PWD:/opt/hmmconf/workspace
+    environment:
+      - RUNTYPE=bash
+      - UPDATE_PYTHON_REQUIREMENTS_ON_CONTAINERSTART=true
+      - PYTHONDONTWRITEBYTECODE=1
+    # install the local hmmconf package
+    command: dev pipi -e python
+  jupyter:
+    image: jwllee/hmmconf:latest
+    ports:
+      - "8001:8000"
+    volumes:
+      - $PWD:/opt/hmmconf/workspace
+    environment:
+      - RUNTYPE=jupyterlab
+      - UPDATE_PYTHON_REQUIREMENTS_ON_CONTAINERSTART=true
+      - PYTHONDONTWRITEBYTECODE=1
+    # install the local hmmconf package
+    command: dev pipi -e python
